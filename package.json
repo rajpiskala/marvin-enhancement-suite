@@ -1,0 +1,29 @@
+{
+  "name": "marvin-enhancement-suite",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Unofficial fixes and opt-in power tools for Amazing Marvin.",
+  "scripts": {
+    "build": "wxt build",
+    "build:firefox": "wxt build -b firefox",
+    "check": "npm run typecheck && npm run test:source && npm run build && npm run build:firefox && npm run test:build",
+    "dev": "wxt",
+    "dev:firefox": "wxt -b firefox",
+    "test": "npm run test:source",
+    "test:source": "npm run test:node && npm run test:vitest",
+    "test:node": "node --test tests/autocomplete-cleanup.test.cjs tests/explicit-duration.test.cjs tests/procrastination-date.test.cjs tests/subtask-toggle.test.cjs tests/task-unroller.test.cjs",
+    "test:build": "node --test tests/build-manifest.test.cjs",
+    "test:vitest": "vitest run tests/settings.test.ts tests/unroller-api.test.ts tests/security.test.ts",
+    "postinstall": "wxt prepare",
+    "typecheck": "wxt prepare && tsc --noEmit"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/chrome": "^0.3.0",
+    "@types/node": "^26.6.1",
+    "rollup": "^4.63.3",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1",
+    "wxt": "^0.21.4"
+  }
+}

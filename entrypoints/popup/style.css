@@ -1,0 +1,10 @@
+:root { color-scheme: light dark; font-family: Inter, system-ui, sans-serif; background: #f7f5fc; color: #231f2c; }
+body { margin: 0; min-width: 310px; }
+main { padding: 18px; }
+.eyebrow { margin: 0; color: #6846c7; font-weight: 900; letter-spacing: .14em; }
+h1 { margin: 4px 0 18px; font-size: 1.25rem; }
+.master { display: flex; align-items: center; gap: 10px; border: 1px solid #ddd7e8; border-radius: 12px; background: #fff; padding: 13px; font-weight: 750; }
+input { width: 19px; height: 19px; accent-color: #6846c7; }
+#feature-count, #status { color: #665f70; font-size: .88rem; }
+button { width: 100%; border: 0; border-radius: 9px; padding: 10px; background: #6846c7; color: #fff; font: inherit; font-weight: 800; cursor: pointer; }
+@media (prefers-color-scheme: dark) { :root { background: #191620; color: #f4f0ff; } .master { background: #27222f; border-color: #453d50; } #feature-count, #status { color: #bcb3c7; } }
