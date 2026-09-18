@@ -21,7 +21,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/mes-popup.png" alt="The Marvin Enhancement Suite popup with its five independently toggleable modules">
+  <img src="docs/assets/mes-popup.png" alt="The Marvin Enhancement Suite popup with its five independently toggleable modules" width="380">
 </p>
 
 Marvin Enhancement Suite (MES) is an unofficial browser extension that bundles conservative bug fixes and opt-in workflow tools for the [Amazing Marvin](https://amazingmarvin.com/) web app. Every module—including default-on fixes—can be disabled from the toolbar popup. Changes apply by reloading open Marvin tabs; a browser restart is never required.
@@ -32,13 +32,59 @@ MES is independent and is not produced, sponsored, or endorsed by Amazing GmbH.
 
 | Module | Default | What it does |
 | --- | --- | --- |
-| Clean up broken task titles | On | Keeps Marvin's autocomplete formatting out of task names when Enter is pressed quickly. |
+| Fix autocomplete text left in task titles | On | Stops Marvin's internal autocomplete markup from being saved into task names. |
 | Show when procrastination started | On | Adds the exact start date to Marvin's “days procrastinated” tooltip. |
-| Prefer explicit time estimates | Off | Only text after `~` sets an estimate, so `Watch the 4 Hour Race ~1h` stays a 1-hour task. |
-| Complete or reopen all subtasks | Off | Changes every subtask at once with `Alt+Shift+D`. |
-| Create a task series from one template | Off | Expands numbered task templates with limits, duplicate protection, confirmation, and best-effort undo. |
+| Override Marvin auto-detected time estimates | Off | Uses your explicit `~` estimate instead of a duration Marvin finds in the title. |
+| Mark all subtasks done or undone | Off | Toggles every subtask at once with `Alt+Shift+D`. |
+| Turn one long task into smaller parts | Off | Expands one numbered task into a satisfying series of smaller tasks. |
 
 Task Unroller is the only module that needs Marvin API credentials. Its setup appears inside the popup only when you want it; MES never blocks first launch or unrelated features on an API key.
+
+### Fix autocomplete text left in task titles
+
+Marvin briefly leaves internal autocomplete markup in the task input after you choose something such as `+Today` or `#health`. A delayed cleanup hook is supposed to remove it. If you edit or submit the task before that hook finishes—especially while typing quickly or backspacing—the extra autocomplete content can be saved as part of the title.
+
+MES makes that cleanup safe and immediate, so the selected date, category, or label still applies without its internal formatting leaking into the task name.
+
+### Show when procrastination started
+
+Marvin can tell you that a task has been procrastinated for a certain number of days, but that makes you calculate the original date yourself. MES adds the exact start date to the existing hover tooltip.
+
+### Override Marvin auto-detected time estimates
+
+Marvin treats duration-like phrases anywhere in a title as a time estimate. That is helpful until the duration is part of the name rather than the work:
+
+```text
+Watch the 4 Hour Race ~1h
+```
+
+Without this module, Marvin can auto-detect `4 Hour` and make it a four-hour task. With the module enabled, the explicit `~1h` wins, so the task keeps the intended one-hour estimate. It also avoids inventing an estimate for a new task that contains a duration-like phrase but no explicit `~` estimate. Estimates set manually through Marvin's controls are preserved.
+
+### Mark all subtasks done or undone
+
+Hover the parent task and press `Alt+Shift+D`. MES marks every unfinished subtask done; use the same shortcut again to mark them all undone. This is useful when the parent task and all of its subtasks should move together.
+
+### Turn one long task into smaller parts
+
+A single three-hour task can feel strangely unrewarding: you work for a long time without getting to finish anything. Task Unroller lets you describe the first part once and creates the rest for you.
+
+Create a new Marvin task like this:
+
+```text
+Watch a really long lecture part (1/6) ~30m
+```
+
+MES keeps that as part `(1/6)` and creates parts `(2/6)` through `(6/6)`, each with the same metadata and 30-minute estimate. You get six concrete stopping points without copying the task or editing every number by hand.
+
+Start the title with a time and MES schedules the parts back to back:
+
+```text
+3:00pm Watch a really long lecture part (1/6) ~30m
+```
+
+The generated series starts at `3:00pm`, `3:30pm`, `4:00pm`, `4:30pm`, `5:00pm`, and `5:30pm`. You can also use range syntax such as `Review lecture notes $1..6`. MES watches only newly created tasks, prevents accidental duplicate expansion, confirms unusually large runs, and offers **Undo latest unroll** in the popup.
+
+Enable Task Unroller and open its setup section to add the two credentials from **Marvin → Features/Strategies → API → View credentials**. The other four modules never need those credentials.
 
 ## Installation
 

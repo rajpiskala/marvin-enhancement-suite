@@ -14,13 +14,13 @@ Fix Amazing Marvin browser bugs and add opt-in workflow tools.
 
 Amazing Marvin is great. A few stubborn browser bugs are not. Marvin Enhancement Suite bundles small fixes and optional workflow tools into one extension, with every module controlled from a compact toolbar popup.
 
-Two conservative fixes start on: MES keeps fast autocomplete submissions out of task titles and adds the exact start date to Marvin's “days procrastinated” tooltip. You can turn either one off at any time.
+Two conservative fixes start on: MES prevents Marvin's delayed autocomplete cleanup from leaving internal markup in task titles, and it adds the exact start date to Marvin's “days procrastinated” tooltip. You can turn either one off at any time.
 
 Three optional tools start off:
 
-- Make only text after `~` count as a time estimate, so “Watch the 4 Hour Race ~1h” stays a 1-hour task.
-- Complete or reopen every subtask in a hovered task with Alt+Shift+D.
-- Turn one numbered template into a task series, with expansion limits, duplicate protection, confirmation for large runs, and best-effort undo.
+- Override Marvin's auto-detected estimate with the explicit estimate after `~`, so “Watch the 4 Hour Race ~1h” stays a 1-hour task.
+- Mark every subtask done or undone from a hovered task with Alt+Shift+D.
+- Turn “Watch lecture part (1/6) ~30m” into six numbered tasks. An optional start time is offset for each new part, with duplicate protection, confirmation for large runs, and best-effort undo.
 
 MES works only on the Amazing Marvin web app. It has no analytics, advertising, telemetry, or maintainer-operated server. Four modules run entirely in the browser. Task Unroller is the only feature that needs API credentials; it is off by default, asks separately for Marvin API access, and sends requests directly to Amazing Marvin only after you enable and configure it.
 

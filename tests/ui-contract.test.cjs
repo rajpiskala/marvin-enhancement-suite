@@ -50,9 +50,11 @@ test("Task Unroller setup and recovery live in the popup without global credenti
 
 test("module descriptions explain the user-visible result", () => {
   const html = read("entrypoints/popup/index.html");
-  assert.match(html, /autocomplete formatting from appearing in a task name/);
+  assert.match(html, /autocomplete markup in a task title/);
   assert.match(html, /exact start date to Marvin’s “days procrastinated” tooltip/);
+  assert.match(html, /Override Marvin auto-detected time estimates/);
   assert.match(html, /Watch the 4 Hour Race ~1h/);
-  assert.match(html, /change every subtask at once/);
-  assert.match(html, /Watch episode \(1\/3\)/);
+  assert.match(html, /Mark all subtasks done or undone/);
+  assert.match(html, /Watch lecture \(1\/6\) ~30m/);
+  assert.match(html, /offsets any start time/);
 });

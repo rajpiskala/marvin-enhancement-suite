@@ -168,7 +168,7 @@ const storeAssets = new Map([
   ["store-assets/screenshot-popup-1280x800.png", { width: 1280, height: 800 }],
   ["store-assets/promo-small-440x280.png", { width: 440, height: 280 }],
   ["store-assets/promo-marquee-1400x560.png", { width: 1400, height: 560 }],
-  ["docs/assets/mes-popup.png", { width: 380, height: 948 }],
+  ["docs/assets/mes-popup.png", { width: 760, height: 2004 }],
 ]);
 for (const [filename, dimensions] of storeAssets) {
   assert.deepEqual(pngDimensions(await readFile(filename)), dimensions, `${filename} has the wrong dimensions`);

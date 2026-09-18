@@ -10,3 +10,4 @@ All notable changes to Marvin Enhancement Suite are documented here.
 - Add guarded Task Unroller operations, bounded receipts, and best-effort undo.
 - Build and verify Chrome Manifest V3 and Firefox packages from one WXT codebase.
 - Add marketplace metadata, source archives, CI, and guarded submission tooling.
+- Clarify every module with concrete examples and add a high-DPI popup screenshot.
