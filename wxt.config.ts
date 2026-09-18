@@ -20,10 +20,6 @@ export default defineConfig({
         matches: ["https://app.amazingmarvin.com/*"],
       },
     ],
-    options_ui: {
-      page: "options.html",
-      open_in_tab: true,
-    },
     browser_specific_settings: {
       gecko: {
         id: "marvin-enhancement-suite@rajpiskala",

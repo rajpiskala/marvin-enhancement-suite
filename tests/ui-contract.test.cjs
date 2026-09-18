@@ -23,13 +23,10 @@ test("popup exposes every module behind an explicit expandable options button", 
   for (const id of expectedIds) assert.match(html, new RegExp(`id="${id}"`));
 });
 
-test("popup and settings explain that changes do not need a browser restart", () => {
+test("popup explains that changes do not need a browser restart", () => {
   const popup = read("entrypoints/popup/index.html");
-  const options = read("entrypoints/options/index.html");
   assert.match(popup, /No browser restart needed\./);
-  assert.match(options, /No browser restart needed\./);
   assert.match(popup, /reloads open Marvin tabs/);
-  assert.match(options, /reloads open Marvin tabs/);
 });
 
 test("the shared theme uses Marvin-inspired Outfit typography and extension teal", () => {
@@ -39,8 +36,23 @@ test("the shared theme uses Marvin-inspired Outfit typography and extension teal
   assert.match(theme, /"Outfit Variable"/);
 });
 
-test("advanced settings disclosure includes a visible action and chevron", () => {
-  const html = read("entrypoints/options/index.html");
-  assert.match(html, /id="advanced-summary-action">Show all 5 controls/);
+test("Task Unroller setup and recovery live in the popup without global credential gating", () => {
+  const html = read("entrypoints/popup/index.html");
+  assert.match(html, /id="unroller-setup"/);
+  assert.match(html, /id="api-token"/);
+  assert.match(html, /id="full-access-token"/);
+  assert.match(html, /id="save-credentials"/);
+  assert.match(html, /id="undo-unroll"/);
+  assert.match(html, /Only Task Unroller needs API credentials\./);
+  assert.doesNotMatch(html, /advanced-settings/);
   assert.match(html, /class="chevron"/);
+});
+
+test("module descriptions explain the user-visible result", () => {
+  const html = read("entrypoints/popup/index.html");
+  assert.match(html, /autocomplete formatting from appearing in a task name/);
+  assert.match(html, /exact start date to Marvin’s “days procrastinated” tooltip/);
+  assert.match(html, /Watch the 4 Hour Race ~1h/);
+  assert.match(html, /change every subtask at once/);
+  assert.match(html, /Watch episode \(1\/3\)/);
 });

@@ -36,3 +36,11 @@ test("both builds keep Marvin API access optional", () => {
   assert.deepEqual(chrome.optional_host_permissions, ["https://serv.amazingmarvin.com/*"]);
   assert.deepEqual(firefox.optional_permissions, ["https://serv.amazingmarvin.com/*"]);
 });
+
+test("both builds keep all user-facing configuration in the popup", () => {
+  for (const browserBuild of ["chrome-mv3", "firefox-mv2"]) {
+    const manifest = manifestFor(browserBuild);
+    assert.equal(manifest.options_ui, undefined);
+    assert.equal(manifest.action?.default_popup || manifest.browser_action?.default_popup, "popup.html");
+  }
+});

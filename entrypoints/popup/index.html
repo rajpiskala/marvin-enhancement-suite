@@ -13,7 +13,7 @@
         <div>
           <p class="eyebrow">MES</p>
           <h1>Marvin Enhancement Suite</h1>
-          <p class="tagline">Unofficial fixes and power tools for Marvin.</p>
+          <p class="tagline">Fix Marvin bugs and add optional workflow tools.</p>
         </div>
       </header>
 
@@ -46,7 +46,7 @@
         <div class="panel-heading">
           <div>
             <p class="eyebrow">Customize</p>
-            <h2 id="options-heading">Choose what MES changes</h2>
+            <h2 id="options-heading">Choose your fixes and features</h2>
           </div>
           <span class="auto-save">Auto-saves</span>
         </div>
@@ -54,9 +54,9 @@
         <div class="feature-list">
           <label class="feature-row">
             <span class="feature-copy">
-              <strong>Autocomplete cleanup</strong>
-              <small>Stops rapid Enter presses from leaking markup into task titles.</small>
-              <span class="feature-badge fix">Fix · default on</span>
+              <strong>Clean up broken task titles</strong>
+              <small>Prevents Marvin’s autocomplete formatting from appearing in a task name when you press Enter quickly.</small>
+              <span class="feature-badge fix">Bug fix · on by default</span>
             </span>
             <span class="switch">
               <input id="feature-autocomplete" type="checkbox" disabled />
@@ -66,9 +66,9 @@
 
           <label class="feature-row">
             <span class="feature-copy">
-              <strong>Procrastination date</strong>
-              <small>Shows the exact procrastination start date on hover.</small>
-              <span class="feature-badge fix">Fix · default on</span>
+              <strong>Show when procrastination started</strong>
+              <small>Adds the exact start date to Marvin’s “days procrastinated” tooltip.</small>
+              <span class="feature-badge fix">Bug fix · on by default</span>
             </span>
             <span class="switch">
               <input id="feature-procrastination" type="checkbox" disabled />
@@ -78,9 +78,9 @@
 
           <label class="feature-row">
             <span class="feature-copy">
-              <strong>Explicit durations only</strong>
-              <small>Uses <code>~1h</code>, not prose such as “4 Hour Race”.</small>
-              <span class="feature-badge enhancement">Enhancement</span>
+              <strong>Prefer explicit time estimates</strong>
+              <small>Only text after <code>~</code> sets the estimate, so “Watch the 4 Hour Race ~1h” stays a 1-hour task.</small>
+              <span class="feature-badge enhancement">Optional feature</span>
             </span>
             <span class="switch">
               <input id="feature-duration" type="checkbox" disabled />
@@ -90,9 +90,9 @@
 
           <label class="feature-row">
             <span class="feature-copy">
-              <strong>Toggle all subtasks</strong>
-              <small>Hover a task, then press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd>.</small>
-              <span class="feature-badge enhancement">Enhancement</span>
+              <strong>Complete or reopen all subtasks</strong>
+              <small>Hover a task and press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> to change every subtask at once.</small>
+              <span class="feature-badge enhancement">Optional feature</span>
             </span>
             <span class="switch">
               <input id="feature-subtasks" type="checkbox" disabled />
@@ -102,9 +102,9 @@
 
           <label class="feature-row">
             <span class="feature-copy">
-              <strong>Task unroller</strong>
-              <small>Expands numbered task sequences with safeguards and undo.</small>
-              <span class="feature-badge experimental">Hardened opt-in</span>
+              <strong>Create a task series from one template</strong>
+              <small>Turns “Watch episode (1/3)” or “Review $1..3” into separate numbered tasks, with limits and undo.</small>
+              <span id="unroller-badge" class="feature-badge experimental">Optional · API setup</span>
             </span>
             <span class="switch">
               <input id="feature-unroller" type="checkbox" disabled />
@@ -113,14 +113,43 @@
           </label>
         </div>
 
-        <p class="unroller-note">Task unroller credentials and undo live in Advanced settings.</p>
+        <details id="unroller-setup" class="unroller-setup">
+          <summary>
+            <span>
+              <strong>Task Unroller setup</strong>
+              <small id="credential-status">Checking credentials…</small>
+            </span>
+            <svg class="chevron" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="m5 7.5 5 5 5-5" />
+            </svg>
+          </summary>
+
+          <div class="unroller-setup-body">
+            <p class="setup-intro"><strong>Only Task Unroller needs API credentials.</strong> Every other MES feature works without them.</p>
+            <p class="credential-help">In Marvin, open <strong>Features/Strategies → API → View credentials</strong>.</p>
+
+            <label class="credential-field">
+              <span>Marvin API token</span>
+              <input id="api-token" type="password" autocomplete="off" spellcheck="false" />
+            </label>
+
+            <label class="credential-field">
+              <span>Marvin full-access token</span>
+              <input id="full-access-token" type="password" autocomplete="off" spellcheck="false" />
+            </label>
+
+            <p class="credential-privacy">Saved only in this browser profile and sent only to Marvin’s API when Task Unroller runs.</p>
+
+            <div class="unroller-actions">
+              <button id="save-credentials" type="button" disabled>Save credentials</button>
+              <button id="undo-unroll" class="secondary" type="button" disabled>Undo latest unroll</button>
+            </div>
+            <small id="undo-help" class="undo-help">Undo restores the original title and moves generated tasks to Marvin Trash.</small>
+          </div>
+        </details>
       </section>
 
       <footer>
-        <button id="advanced-settings" class="advanced-settings" type="button">
-          <span>Advanced settings &amp; safety</span>
-          <span aria-hidden="true">↗</span>
-        </button>
         <p class="reload-note"><strong>No browser restart needed.</strong> MES reloads open Marvin tabs after a change.</p>
         <p id="status" role="status" aria-live="polite"></p>
       </footer>
