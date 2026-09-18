@@ -3,30 +3,61 @@
   "version": "0.1.0",
   "private": true,
   "description": "Unofficial fixes and opt-in power tools for Amazing Marvin.",
+  "author": "Raj Piskala",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rajpiskala/marvin-enhancement-suite.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rajpiskala/marvin-enhancement-suite/issues"
+  },
+  "homepage": "https://github.com/rajpiskala/marvin-enhancement-suite#readme",
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
+    "clean": "wxt clean",
     "build": "wxt build",
     "build:firefox": "wxt build -b firefox",
-    "check": "npm run typecheck && npm run test:source && npm run build && npm run build:firefox && npm run test:build",
+    "build:all": "npm run build && npm run build:firefox",
+    "build-for-amo": "npm run clean && npm run icons && npm run typecheck && npm run build:all && npm run lint:firefox && npm run zip:chrome && npm run zip:firefox && npm run verify:release",
+    "check": "npm run typecheck && npm run test:source && npm run build:all && npm run lint:firefox && npm run test:build",
     "dev": "wxt",
     "dev:firefox": "wxt -b firefox",
+    "icons": "node tools/generate-icons.mjs",
+    "lint:firefox": "node tools/run-web-ext.mjs lint --source-dir .output/firefox-mv2 --warnings-as-errors",
+    "release": "npm run clean && npm run icons && npm run check && npm run zip:chrome && npm run zip:firefox && npm run verify:release",
+    "submit": "node tools/submit-stores.mjs",
+    "submit:dry-run": "node tools/submit-stores.mjs --dry-run",
     "test": "npm run test:source",
     "test:source": "npm run test:node && npm run test:vitest",
     "test:node": "node --test tests/autocomplete-cleanup.test.cjs tests/explicit-duration.test.cjs tests/procrastination-date.test.cjs tests/subtask-toggle.test.cjs tests/task-unroller.test.cjs tests/ui-contract.test.cjs",
     "test:build": "node --test tests/build-manifest.test.cjs",
-    "test:vitest": "vitest run tests/settings.test.ts tests/unroller-api.test.ts tests/security.test.ts",
+    "test:vitest": "vitest run tests/settings.test.ts tests/unroller-api.test.ts tests/security.test.ts tests/task-unroller-permissions.test.ts",
     "postinstall": "wxt prepare",
-    "typecheck": "wxt prepare && tsc --noEmit"
+    "preview:popup": "node tools/preview-server.mjs",
+    "typecheck": "wxt prepare && tsc --noEmit",
+    "verify:release": "node tools/verify-release.mjs",
+    "version:set": "node tools/set-version.mjs",
+    "zip:chrome": "wxt zip",
+    "zip:firefox": "wxt zip -b firefox --sources"
   },
-  "license": "MIT",
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@types/chrome": "^0.3.0",
     "@types/node": "^26.6.1",
     "rollup": "^4.63.3",
     "typescript": "^7.0.2",
     "vitest": "^5.0.1",
-    "wxt": "^0.21.4"
+    "web-ext": "10.6.0",
+    "wxt": "^0.21.4",
+    "yauzl": "^3.4.0"
   },
   "dependencies": {
     "@fontsource-variable/outfit": "^5.3.0"
+  },
+  "overrides": {
+    "image-size": "2.0.4"
   }
 }

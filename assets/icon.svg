@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Marvin Enhancement Suite</title>
+  <desc id="desc">A white M on a rounded teal square with a small gold accent.</desc>
+  <defs>
+    <linearGradient id="teal" x1="24" y1="20" x2="104" y2="108" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#66DDE1"/>
+      <stop offset="0.56" stop-color="#1CC5CB"/>
+      <stop offset="1" stop-color="#0E9FA7"/>
+    </linearGradient>
+    <filter id="shadow" x="8" y="8" width="112" height="116" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#075D63" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+  <g filter="url(#shadow)">
+    <rect x="16" y="16" width="96" height="96" rx="25" fill="url(#teal)"/>
+    <circle cx="94" cy="35" r="9" fill="#F7DA88"/>
+    <path d="M38 86V47L64 72L90 47V86" fill="none" stroke="#FFFFFF" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

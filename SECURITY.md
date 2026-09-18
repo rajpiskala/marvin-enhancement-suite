@@ -2,20 +2,22 @@
 
 ## Reporting a vulnerability
 
-Do not include Amazing Marvin tokens, private task data, screenshots containing personal information, or account credentials in a public issue.
+Please use [GitHub's private vulnerability report](https://github.com/rajpiskala/marvin-enhancement-suite/security/advisories/new) for credential exposure, unauthorized task changes, permission bypasses, or another sensitive issue.
 
-For a suspected credential leak or data-changing vulnerability, contact the maintainer privately through the security contact configured on the eventual GitHub repository. Until that channel exists, keep the report local and do not publish exploit details.
+Do not put Marvin tokens, private task data, screenshots containing personal information, or exploit details in a public issue.
 
 ## Design constraints
 
 - No remotely hosted executable code.
-- No analytics or third-party telemetry.
+- No analytics, advertising, or third-party telemetry.
 - No API credentials in page-world scripts, DOM attributes, logs, URLs, or error messages.
 - No wildcard host permissions.
-- Full-access API operations are restricted to the fields Task Unroller requires.
-- Data-changing modules are disabled by default and must fail closed.
-- Compatibility failures in one module must not prevent other modules or Marvin itself from loading.
+- Required host access is limited to the Amazing Marvin web app.
+- Marvin API access and Firefox data consent are requested only when Task Unroller is enabled.
+- Background API operations accept only the narrow fields Task Unroller requires.
+- Data-changing modules are disabled by default and fail closed.
+- A failure in one module must not prevent Marvin or other MES modules from loading.
 
 ## Supported versions
 
-Only the latest MES development revision is supported before the first public release.
+Security fixes are applied to the latest released MES version. Before the first store release, only the latest revision on `main` is supported.

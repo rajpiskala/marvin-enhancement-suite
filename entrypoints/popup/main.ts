@@ -1,6 +1,7 @@
 import { browser } from "wxt/browser";
 import { getSettings, saveSettings, type FeatureId, type MesSettings } from "../../src/settings";
 import { reloadMarvinTabs } from "../../src/reload-marvin";
+import { taskUnrollerPermissions } from "../../src/task-unroller-permissions";
 
 const elements = {
   master: requiredButton("master-toggle"),
@@ -152,7 +153,9 @@ for (const [feature, input] of featureInputs) {
     if (!currentSettings) return;
 
     if (feature === "taskUnroller" && input.checked) {
-      const granted = await browser.permissions.request({ origins: ["https://serv.amazingmarvin.com/*"] });
+      const granted = await browser.permissions.request(
+        taskUnrollerPermissions(import.meta.env.BROWSER) as Parameters<typeof browser.permissions.request>[0],
+      );
       if (!granted) {
         input.checked = false;
         elements.status.textContent = "Task unroller stayed off because Marvin API access was not granted.";
@@ -174,7 +177,9 @@ for (const [feature, input] of featureInputs) {
     );
 
     if (feature === "taskUnroller" && !input.checked) {
-      await browser.permissions.remove({ origins: ["https://serv.amazingmarvin.com/*"] });
+      await browser.permissions.remove(
+        taskUnrollerPermissions(import.meta.env.BROWSER) as Parameters<typeof browser.permissions.remove>[0],
+      );
     }
   });
 }

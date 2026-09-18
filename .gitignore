@@ -2,6 +2,12 @@ node_modules/
 .output/
 .wxt/
 coverage/
+dev/
+.env
+.env.*
+!.env.example
 *.zip
 *.crx
+*.pem
+*.xpi
 web-ext-artifacts/

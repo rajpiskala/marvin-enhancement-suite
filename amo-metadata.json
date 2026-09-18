@@ -1,0 +1,12 @@
+{
+  "summary": {
+    "en-US": "Fix Amazing Marvin browser bugs and add opt-in workflow tools."
+  },
+  "categories": [
+    "other"
+  ],
+  "version": {
+    "license": "MIT",
+    "approval_notes": "Marvin Enhancement Suite runs only on https://app.amazingmarvin.com/. Its four DOM-based modules process task information locally and make no extension-owned network requests. Task Unroller is off by default and separately requests access to https://serv.amazingmarvin.com/ plus optional authenticationInfo and websiteContent data consent; it sends user-provided credentials and task operations directly to Amazing Marvin only after the user enables and configures that feature. There is no analytics, telemetry, advertising, remote code, or maintainer-operated service. Build instructions and a versioned source archive are included with the submission."
+  }
+}
