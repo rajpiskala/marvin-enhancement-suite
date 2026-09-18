@@ -1,6 +1,6 @@
 # AMO source-code build instructions
 
-This archive contains the original, human-readable TypeScript, JavaScript, CSS, HTML, and configuration used to build Marvin Enhancement Suite. The submitted Firefox package is produced by WXT and Vite, so the generated runtime bundle is accompanied by this source archive.
+This archive contains the original, human-readable TypeScript, CSS, HTML, and configuration used to build Marvin Enhancement Suite. The submitted Firefox package is produced by WXT and Vite, so the generated runtime bundle is accompanied by this source archive.
 
 ## Build environment
 

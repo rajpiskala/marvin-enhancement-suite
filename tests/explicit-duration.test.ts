@@ -1,7 +1,6 @@
-const test = require("node:test");
-const assert = require("node:assert/strict");
-
-const {
+import assert from "node:assert/strict";
+import { test } from "vitest";
+import {
   addIntent,
   computeDesiredEstimate,
   createStats,
@@ -13,7 +12,7 @@ const {
   parseBareDuration,
   parseExplicitDuration,
   stripExplicitDurationSyntax,
-} = require("../src/page/explicit-duration.js");
+} from "../src/page/explicit-duration";
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -34,9 +33,9 @@ test("does not mistake clock times or hyphenated prose for bare durations", () =
 });
 
 test("parses explicit compound durations", () => {
-  assert.equal(parseExplicitDuration("Task ~2h").millis, 2 * HOUR);
-  assert.equal(parseExplicitDuration("Task ~1h 30m").millis, 90 * MINUTE);
-  assert.equal(parseExplicitDuration("Task ca. 20m").millis, 20 * MINUTE);
+  assert.equal(parseExplicitDuration("Task ~2h")?.millis, 2 * HOUR);
+  assert.equal(parseExplicitDuration("Task ~1h 30m")?.millis, 90 * MINUTE);
+  assert.equal(parseExplicitDuration("Task ca. 20m")?.millis, 20 * MINUTE);
 });
 
 test("explicit duration wins instead of being added to incidental prose", () => {
@@ -55,20 +54,21 @@ test("accepting Marvin's autocomplete cannot replace an explicit intent with a b
   const inputInstance = {};
   const runtime = {
     inputExplicitIntents: new WeakMap(),
-    pendingIntents: [],
+    pendingIntents: [] as Array<{ desiredEstimate: number; kind: string }>,
     stats: createStats(),
     trustedEstimates: {},
   };
+  const typedRuntime = runtime as unknown as Parameters<typeof addIntent>[0];
 
   const explicit = addIntent(
-    runtime,
+    typedRuntime,
     "Watch the 10 hour marathon ~20m",
     { _id: "temp", timeEstimate: 0 },
     "first Enter",
     inputInstance,
   );
   const afterAutocomplete = addIntent(
-    runtime,
+    typedRuntime,
     "Watch the 10 hour marathon",
     { _id: "temp", timeEstimate: 0 },
     "second Enter",
@@ -77,20 +77,21 @@ test("accepting Marvin's autocomplete cannot replace an explicit intent with a b
 
   assert.equal(afterAutocomplete, explicit);
   assert.equal(runtime.pendingIntents.length, 1);
-  assert.equal(runtime.pendingIntents[0].kind, "explicit");
-  assert.equal(runtime.pendingIntents[0].desiredEstimate, 20 * MINUTE);
+  assert.equal(runtime.pendingIntents[0]!.kind, "explicit");
+  assert.equal(runtime.pendingIntents[0]!.desiredEstimate, 20 * MINUTE);
 });
 
 test("a cleaned inline task update cannot override its matching explicit duration edit", () => {
   const inputInstance = {};
   const runtime = {
     inputExplicitIntents: new WeakMap(),
-    pendingIntents: [],
+    pendingIntents: [] as Array<{ desiredEstimate: number; kind: string }>,
     stats: createStats(),
     trustedEstimates: {
-      "task-1": { value: 0, updatedAt: Date.now() },
+      "task-1": { value: 0, updatedAt: Date.now(), source: "test" },
     },
   };
+  const typedRuntime = runtime as unknown as Parameters<typeof addIntent>[0];
   const task = {
     _id: "task-1",
     title: "8:00am Watch the 10 hour marathon",
@@ -98,14 +99,14 @@ test("a cleaned inline task update cannot override its matching explicit duratio
   };
 
   const explicit = addIntent(
-    runtime,
+    typedRuntime,
     "8:00am Watch the 10 hour marathon ~20m",
     task,
     "keydown:Enter",
     inputInstance,
   );
   const cleanedUpdate = addIntent(
-    runtime,
+    typedRuntime,
     "8:00am Watch the 10 hour marathon",
     task,
     "Task.updateTask",
@@ -113,8 +114,8 @@ test("a cleaned inline task update cannot override its matching explicit duratio
 
   assert.equal(cleanedUpdate, explicit);
   assert.equal(runtime.pendingIntents.length, 1);
-  assert.equal(runtime.pendingIntents[0].kind, "explicit");
-  assert.equal(runtime.pendingIntents[0].desiredEstimate, 20 * MINUTE);
+  assert.equal(runtime.pendingIntents[0]!.kind, "explicit");
+  assert.equal(runtime.pendingIntents[0]!.desiredEstimate, 20 * MINUTE);
 });
 
 test("a same-title explicit edit can be applied even when Marvin skips the title save", () => {
@@ -158,20 +159,32 @@ test("observing a task input does not replace Marvin's submit or blur methods", 
     stats: createStats(),
   };
 
-  assert.equal(patchTaskInput(input, runtime), true);
+  assert.equal(
+    patchTaskInput(
+      input as unknown as Parameters<typeof patchTaskInput>[0],
+      runtime as unknown as Parameters<typeof patchTaskInput>[1],
+    ),
+    true,
+  );
   assert.equal(instance.submit, submit);
   assert.equal(instance.blur, blur);
 });
 
 test("observing a task does not replace Marvin's metadata update method", () => {
   const updateTask = async () => "updated";
-  const instance = { updateTask };
+  const instance = { props: { task: { _id: "task-1" } }, updateTask };
   const runtime = {
     patchedTasks: new Set(),
     stats: createStats(),
   };
 
-  assert.equal(patchTaskInstance(instance, runtime), true);
+  assert.equal(
+    patchTaskInstance(
+      instance as unknown as Parameters<typeof patchTaskInstance>[0],
+      runtime as unknown as Parameters<typeof patchTaskInstance>[1],
+    ),
+    true,
+  );
   assert.equal(instance.updateTask, updateTask);
 });
 

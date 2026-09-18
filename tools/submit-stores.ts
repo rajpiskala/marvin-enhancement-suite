@@ -4,8 +4,11 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const packageJson = JSON.parse(await readFile(path.join(projectRoot, "package.json"), "utf8"));
-const artifact = (browser) => path.join(
+const packageJson = JSON.parse(await readFile(path.join(projectRoot, "package.json"), "utf8")) as {
+  name: string;
+  version: string;
+};
+const artifact = (browser: string): string => path.join(
   projectRoot,
   ".output",
   `${packageJson.name}-${packageJson.version}-${browser}.zip`,

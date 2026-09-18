@@ -1,32 +1,129 @@
-// ==UserScript==
-// @name         Amazing Marvin - Explicit Duration Estimates Only
-// @namespace    https://app.amazingmarvin.com/
-// @version      0.1.2
-// @description  Prevents prose such as "10 hour marathon" from becoming a duration; use ~2h, ca. 2h, or Marvin's duration control explicitly.
-// @author       Raj Piskala
-// @match        https://app.amazingmarvin.com/*
-// @match        https://amazingmarvin.com/*
-// @grant        none
-// @run-at       document-idle
-// ==/UserScript==
+const VERSION = "0.1.2";
 
-(function bootstrap(root, factory) {
-  "use strict";
+type DecisionKind =
+  | "explicit"
+  | "explicit-without-title-change"
+  | "bare-preserve-trusted"
+  | "bare-new-task"
+  | "bare-replace-inferred"
+  | "bare-preserve-existing"
+  | "remove-guarded-late-inferred-duration"
+  | string;
 
-  const api = factory();
+export interface MarvinTask {
+  [key: string]: unknown;
+  _deleted?: boolean;
+  _doc_id_rev?: string;
+  _id?: string | null;
+  createdAt?: unknown;
+  db?: string;
+  timeEstimate?: unknown;
+  title?: string;
+  updatedAt?: unknown;
+}
 
-  if (typeof module === "object" && module.exports) {
-    module.exports = api;
-  }
+export interface TaskSnapshot extends MarvinTask {
+  _id: string | null;
+  createdAt: unknown;
+  title: string;
+  timeEstimate: number;
+  updatedAt: unknown;
+}
 
-  if (!root?.document) return;
-  if (root.AMMarvinExplicitDurationFix?.installed) return;
+export interface DurationDecision {
+  desiredEstimate: number;
+  kind: DecisionKind;
+}
 
-  root.AMMarvinExplicitDurationFix = api.install(root.document);
-})(typeof window === "undefined" ? globalThis : window, function createApi() {
-  "use strict";
+export interface ExplicitDurationSpan {
+  start: number;
+  end: number;
+}
 
-  const VERSION = "0.1.2";
+export interface ExplicitDuration {
+  millis: number;
+  spans: ExplicitDurationSpan[];
+}
+
+interface TaskInputInstance {
+  blur?: (...args: unknown[]) => unknown;
+  getTask: (...args: unknown[]) => unknown;
+  props?: { task?: MarvinTask };
+  state: { value: string };
+  submit: (...args: unknown[]) => unknown;
+}
+
+interface TaskInstance {
+  props: { task?: MarvinTask; [key: string]: unknown };
+  updateTask: (fields: Partial<MarvinTask>) => Promise<unknown> | unknown;
+}
+
+interface ReactFiber {
+  return?: ReactFiber | null;
+  stateNode?: unknown;
+}
+
+interface TrustedEstimate {
+  source: string;
+  updatedAt: number;
+  value: number;
+}
+
+interface ExplicitIntent {
+  beforeTask: TaskSnapshot | null;
+  desiredEstimate: number;
+  expectedTitle: string;
+  inputInstance: object | null;
+  kind: DecisionKind;
+  rawTitle: string;
+  recordedAt: number;
+  source: string;
+  taskId: string | null;
+}
+
+interface ParserGuard {
+  desiredEstimate: number;
+  expectedTitle: string;
+  until: number;
+}
+
+export interface ExplicitDurationStats {
+  inputsPatched: number;
+  taskInstancesPatched: number;
+  intentsRecorded: number;
+  correctionsRequested: number;
+  correctionsApplied: number;
+  correctionsSkippedStale: number;
+  databaseTaskChangesSeen: number;
+  manualEstimatesRemembered: number;
+  errors: number;
+}
+
+interface ExplicitDurationRuntime {
+  correctionsInFlight: Set<string>;
+  databasePollInFlight: boolean;
+  databaseReady: boolean;
+  databaseSequences: Map<string, IDBValidKey>;
+  document: Document;
+  explicitFallbackTimers: Map<string, number>;
+  inputExplicitIntents: WeakMap<object, ExplicitIntent>;
+  patchedInputs: Set<TaskInputInstance>;
+  patchedTasks: Set<TaskInstance>;
+  parserGuards: Map<string, ParserGuard>;
+  pendingIntents: ExplicitIntent[];
+  scanTimer: number | null;
+  scheduleScan: (delay?: number) => void;
+  stats: ExplicitDurationStats;
+  taskSnapshots: Map<string, TaskSnapshot>;
+  trustedEstimates: Record<string, TrustedEstimate>;
+  updaterTemplate: TaskInstance | null;
+  window: Window;
+}
+
+interface PouchChange {
+  doc: MarvinTask;
+  key: IDBValidKey;
+}
   const TASK_INPUT_SELECTOR = ".TaskInput__input";
   const TASK_ROW_SELECTOR = '[data-item-type="task"][data-item-id]';
   const TRUSTED_ESTIMATES_KEY = "amExplicitDurationFix.trustedEstimates.v1";
@@ -75,17 +172,17 @@
   const DURATION_TOKEN_GLOBAL = new RegExp(`\\b(${AMOUNT_SOURCE})\\s*(${UNIT_SOURCE})\\b`, "gi");
   const EXPLICIT_MARKER_GLOBAL = /(?:^|[\s(])(?:~|ca\.?)\s*/gi;
 
-  function normalizeEstimate(value) {
+  function normalizeEstimate(value: unknown): number {
     const estimate = Number(value);
     return Number.isFinite(estimate) && estimate > 0 ? Math.round(estimate) : 0;
   }
 
-  function parseAmount(value) {
+  function parseAmount(value: string): number {
     if (/^\d/i.test(value)) return Number(value);
-    return NUMBER_WORDS[String(value).toLowerCase()] ?? NaN;
+    return (NUMBER_WORDS as Readonly<Record<string, number>>)[String(value).toLowerCase()] ?? Number.NaN;
   }
 
-  function durationMillis(amountText, unitText) {
+  function durationMillis(amountText: string, unitText: string): number {
     const amount = parseAmount(amountText);
     if (!Number.isFinite(amount) || amount <= 0) return 0;
 
@@ -94,9 +191,9 @@
     return Math.round(amount * multiplier);
   }
 
-  function parseExplicitDuration(text) {
+  function parseExplicitDuration(text: unknown): ExplicitDuration | null {
     const source = String(text || "");
-    const spans = [];
+    const spans: ExplicitDurationSpan[] = [];
     let millis = 0;
     let marker;
 
@@ -110,7 +207,7 @@
         const token = DURATION_TOKEN_AT_START.exec(source.slice(cursor));
         if (!token) break;
 
-        const value = durationMillis(token[1], token[2]);
+        const value = durationMillis(token[1]!, token[2]!);
         if (!value) break;
 
         markerMillis += value;
@@ -128,12 +225,12 @@
     return millis > 0 ? { millis, spans } : null;
   }
 
-  function hasExplicitMarkerImmediatelyBefore(source, index) {
+  function hasExplicitMarkerImmediatelyBefore(source: string, index: number): boolean {
     const prefix = source.slice(Math.max(0, index - 12), index);
     return /(?:~|ca\.?)\s*$/i.test(prefix);
   }
 
-  function parseBareDuration(text) {
+  function parseBareDuration(text: unknown): number {
     const source = String(text || "");
     let millis = 0;
     let match;
@@ -141,13 +238,13 @@
     DURATION_TOKEN_GLOBAL.lastIndex = 0;
     while ((match = DURATION_TOKEN_GLOBAL.exec(source))) {
       if (hasExplicitMarkerImmediatelyBefore(source, match.index)) continue;
-      millis += durationMillis(match[1], match[2]);
+      millis += durationMillis(match[1]!, match[2]!);
     }
 
     return millis;
   }
 
-  function stripExplicitDurationSyntax(text) {
+  function stripExplicitDurationSyntax(text: unknown): string {
     const source = String(text || "");
     const explicit = parseExplicitDuration(source);
     if (!explicit) return source;
@@ -159,7 +256,7 @@
     return result;
   }
 
-  function normalizeTitleForMatch(text) {
+  function normalizeTitleForMatch(text: unknown): string {
     return stripExplicitDurationSyntax(text)
       .replace(/^\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)\b\s*/i, "")
       .replace(/\s+/g, " ")
@@ -167,7 +264,7 @@
       .toLowerCase();
   }
 
-  function snapshotTask(task) {
+  function snapshotTask(task: MarvinTask | null | undefined): TaskSnapshot | null {
     if (!task || typeof task !== "object") return null;
     return {
       _id: task._id || taskIdFromDoc(task),
@@ -178,22 +275,28 @@
     };
   }
 
-  function taskIdFromDoc(task) {
+  function taskIdFromDoc(task: MarvinTask | TaskSnapshot | null | undefined): string | null {
     if (task?._id) return task._id;
     return String(task?._doc_id_rev || "").split("::")[0] || null;
   }
 
-  function looksLikeMarvinTask(task) {
-    return Boolean(task && !task._deleted && task.db === "Tasks" && taskIdFromDoc(task) && typeof task.title === "string");
+  function looksLikeMarvinTask(task: unknown): task is MarvinTask {
+    if (!task || typeof task !== "object") return false;
+    const candidate = task as MarvinTask;
+    return Boolean(!candidate._deleted && candidate.db === "Tasks" && taskIdFromDoc(candidate) && typeof candidate.title === "string");
   }
 
-  function estimateWasProbablyInferred(task) {
+  function estimateWasProbablyInferred(task: MarvinTask | TaskSnapshot | null | undefined): boolean {
     const estimate = normalizeEstimate(task?.timeEstimate);
     const inferred = parseBareDuration(task?.title);
     return inferred > 0 && estimate === inferred;
   }
 
-  function computeDesiredEstimate(rawTitle, beforeTask, trustedEstimate) {
+  function computeDesiredEstimate(
+    rawTitle: unknown,
+    beforeTask: MarvinTask | TaskSnapshot | null | undefined,
+    trustedEstimate?: unknown,
+  ): DurationDecision | null {
     const explicit = parseExplicitDuration(rawTitle);
     if (explicit) {
       return {
@@ -225,40 +328,50 @@
     };
   }
 
-  function findReactFiber(element) {
+  function findReactFiber(element: unknown): ReactFiber | null {
     if (!element || typeof element !== "object") return null;
-    const key = Object.keys(element).find(
+    const record = element as Record<string, unknown>;
+    const key = Object.keys(record).find(
       (name) => name.startsWith("__reactFiber$") || name.startsWith("__reactInternalInstance$"),
     );
-    return key ? element[key] : null;
+    return key ? record[key] as ReactFiber : null;
   }
 
-  function findTaskInputInstance(input) {
+  function isTaskInputInstance(value: unknown): value is TaskInputInstance {
+    if (!value || typeof value !== "object") return false;
+    const instance = value as Partial<TaskInputInstance>;
+    return typeof instance.getTask === "function"
+      && typeof instance.submit === "function"
+      && typeof instance.state?.value === "string";
+  }
+
+  function findTaskInputInstance(input: unknown): TaskInputInstance | null {
     let fiber = findReactFiber(input);
     let depth = 0;
 
     while (fiber && depth < 80) {
       const instance = fiber.stateNode;
       if (
-        instance &&
-        typeof instance === "object" &&
-        typeof instance.getTask === "function" &&
-        typeof instance.submit === "function" &&
-        instance.state &&
-        typeof instance.state.value === "string"
+        isTaskInputInstance(instance)
       ) {
         return instance;
       }
-      fiber = fiber.return;
+      fiber = fiber.return ?? null;
       depth += 1;
     }
 
     return null;
   }
 
-  function findTaskInstance(row) {
-    const itemId = row?.getAttribute?.("data-item-id");
-    const starts = [row, ...Array.from(row?.querySelectorAll?.("*") || []).slice(0, 20)];
+  function isTaskInstance(value: unknown): value is TaskInstance {
+    if (!value || typeof value !== "object") return false;
+    const instance = value as Partial<TaskInstance>;
+    return typeof instance.updateTask === "function" && Boolean(instance.props?.task);
+  }
+
+  function findTaskInstance(row: Element | null | undefined): TaskInstance | null {
+    const itemId = row?.getAttribute("data-item-id");
+    const starts: Element[] = row ? [row, ...Array.from(row.querySelectorAll("*")).slice(0, 20)] : [];
 
     for (const start of starts) {
       let fiber = findReactFiber(start);
@@ -267,15 +380,12 @@
       while (fiber && depth < 80) {
         const instance = fiber.stateNode;
         if (
-          instance &&
-          typeof instance === "object" &&
-          typeof instance.updateTask === "function" &&
-          instance.props?.task &&
-          (!itemId || instance.props.task._id === itemId)
+          isTaskInstance(instance) &&
+          (!itemId || instance.props.task!._id === itemId)
         ) {
           return instance;
         }
-        fiber = fiber.return;
+        fiber = fiber.return ?? null;
         depth += 1;
       }
     }
@@ -283,7 +393,7 @@
     return null;
   }
 
-  function createStats() {
+  function createStats(): ExplicitDurationStats {
     return {
       inputsPatched: 0,
       taskInstancesPatched: 0,
@@ -297,16 +407,16 @@
     };
   }
 
-  function loadTrustedEstimates(windowObject) {
+  function loadTrustedEstimates(windowObject: Window): Record<string, TrustedEstimate> {
     try {
       const parsed = JSON.parse(windowObject.localStorage.getItem(TRUSTED_ESTIMATES_KEY) || "{}");
-      return parsed && typeof parsed === "object" ? parsed : {};
-    } catch (_) {
+      return parsed && typeof parsed === "object" ? parsed as Record<string, TrustedEstimate> : {};
+    } catch {
       return {};
     }
   }
 
-  function saveTrustedEstimates(runtime) {
+  function saveTrustedEstimates(runtime: ExplicitDurationRuntime): void {
     try {
       const entries = Object.entries(runtime.trustedEstimates)
         .sort(([, a], [, b]) => Number(b?.updatedAt || 0) - Number(a?.updatedAt || 0))
@@ -319,12 +429,17 @@
     }
   }
 
-  function trustedEstimateFor(runtime, taskId) {
+  function trustedEstimateFor(runtime: ExplicitDurationRuntime, taskId: string | null): number | undefined {
     const entry = taskId ? runtime.trustedEstimates[taskId] : null;
     return entry && Number.isFinite(Number(entry.value)) ? normalizeEstimate(entry.value) : undefined;
   }
 
-  function rememberTrustedEstimate(runtime, taskId, value, source) {
+  function rememberTrustedEstimate(
+    runtime: ExplicitDurationRuntime,
+    taskId: string | null,
+    value: unknown,
+    source: string,
+  ): void {
     if (!taskId || taskId === "temp") return;
 
     runtime.trustedEstimates[taskId] = {
@@ -336,11 +451,14 @@
     saveTrustedEstimates(runtime);
   }
 
-  function pruneIntents(runtime, now = Date.now()) {
+  function pruneIntents(runtime: ExplicitDurationRuntime, now = Date.now()): void {
     runtime.pendingIntents = runtime.pendingIntents.filter((intent) => now - intent.recordedAt <= INTENT_TTL_MS);
   }
 
-  function explicitIntentMatchesCurrentTitle(intent, task) {
+  function explicitIntentMatchesCurrentTitle(
+    intent: Pick<ExplicitIntent, "expectedTitle" | "kind" | "taskId"> | null | undefined,
+    task: MarvinTask | TaskSnapshot | null | undefined,
+  ): boolean {
     return Boolean(
       intent?.kind === "explicit" &&
         intent.taskId &&
@@ -349,7 +467,10 @@
     );
   }
 
-  function scheduleExplicitWithoutTitleChange(runtime, intent) {
+  function scheduleExplicitWithoutTitleChange(
+    runtime: ExplicitDurationRuntime,
+    intent: ExplicitIntent | null | undefined,
+  ): void {
     if (
       !intent?.taskId ||
       intent.kind !== "explicit" ||
@@ -360,14 +481,15 @@
       return;
     }
 
-    const earlierTimer = runtime.explicitFallbackTimers.get(intent.taskId);
+    const taskId = intent.taskId;
+    const earlierTimer = runtime.explicitFallbackTimers.get(taskId);
     if (earlierTimer != null) runtime.window.clearTimeout(earlierTimer);
 
     const timer = runtime.window.setTimeout(() => {
-      runtime.explicitFallbackTimers.delete(intent.taskId);
+      runtime.explicitFallbackTimers.delete(taskId);
       if (!runtime.pendingIntents.includes(intent)) return;
 
-      const currentTask = runtime.taskSnapshots.get(intent.taskId) || intent.beforeTask;
+      const currentTask = runtime.taskSnapshots.get(taskId) || intent.beforeTask;
       if (!explicitIntentMatchesCurrentTitle(intent, currentTask)) return;
 
       runtime.pendingIntents = runtime.pendingIntents.filter((candidate) => candidate !== intent);
@@ -376,14 +498,21 @@
         desiredEstimate: intent.desiredEstimate,
         kind: "explicit-without-title-change",
       };
+      if (!currentTask) return;
       armParserGuard(runtime, currentTask, decision);
       void applyCorrection(runtime, currentTask, null, decision);
     }, EXPLICIT_NO_TITLE_CHANGE_DELAY_MS);
 
-    runtime.explicitFallbackTimers.set(intent.taskId, timer);
+    runtime.explicitFallbackTimers.set(taskId, timer);
   }
 
-  function addIntent(runtime, rawTitle, task, source, inputInstance = null) {
+  function addIntent(
+    runtime: ExplicitDurationRuntime,
+    rawTitle: unknown,
+    task: MarvinTask | TaskSnapshot | null | undefined,
+    source: string,
+    inputInstance: object | null = null,
+  ): ExplicitIntent | null {
     const title = String(rawTitle || "").trim();
     const beforeTask = snapshotTask(task);
     const taskId = beforeTask?._id && beforeTask._id !== "temp" ? beforeTask._id : null;
@@ -457,7 +586,11 @@
     return intent;
   }
 
-  function findIntent(runtime, task, allowUntargeted) {
+  function findIntent(
+    runtime: ExplicitDurationRuntime,
+    task: MarvinTask | TaskSnapshot,
+    allowUntargeted: boolean,
+  ): ExplicitIntent | null {
     const now = Date.now();
     pruneIntents(runtime, now);
     const taskId = taskIdFromDoc(task);
@@ -465,7 +598,7 @@
 
     let index = -1;
     for (let i = runtime.pendingIntents.length - 1; i >= 0; i -= 1) {
-      if (runtime.pendingIntents[i].taskId === taskId) {
+      if (runtime.pendingIntents[i]?.taskId === taskId) {
         index = i;
         break;
       }
@@ -474,7 +607,7 @@
     if (index < 0 && allowUntargeted) {
       for (let i = runtime.pendingIntents.length - 1; i >= 0; i -= 1) {
         const intent = runtime.pendingIntents[i];
-        if (!intent.taskId && intent.expectedTitle === normalizedTitle) {
+        if (intent && !intent.taskId && intent.expectedTitle === normalizedTitle) {
           index = i;
           break;
         }
@@ -483,21 +616,22 @@
 
     if (index < 0) return null;
     const intent = runtime.pendingIntents.splice(index, 1)[0];
+    if (!intent) return null;
     if (intent.inputInstance) runtime.inputExplicitIntents.delete(intent.inputInstance);
     return intent;
   }
 
-  function taskInputTask(instance) {
+  function taskInputTask(instance: TaskInputInstance | null | undefined): MarvinTask | null {
     return instance?.props?.task || null;
   }
 
-  function recordTaskInputIntent(runtime, input, source) {
+  function recordTaskInputIntent(runtime: ExplicitDurationRuntime, input: Element, source: string): ExplicitIntent | null {
     const instance = findTaskInputInstance(input);
     if (!instance) return null;
-    return addIntent(runtime, instance.state?.value ?? input.value, taskInputTask(instance), source, instance);
+    return addIntent(runtime, instance.state?.value ?? (input as HTMLInputElement).value, taskInputTask(instance), source, instance);
   }
 
-  function patchTaskInput(input, runtime) {
+  function patchTaskInput(input: Element, runtime: ExplicitDurationRuntime): boolean {
     if (!input?.matches?.(TASK_INPUT_SELECTOR)) return false;
     const instance = findTaskInputInstance(input);
     if (!instance) return false;
@@ -512,7 +646,7 @@
     return true;
   }
 
-  function patchTaskInstance(instance, runtime) {
+  function patchTaskInstance(instance: TaskInstance | null | undefined, runtime: ExplicitDurationRuntime): boolean {
     if (!instance || typeof instance.updateTask !== "function") return false;
     if (runtime.patchedTasks.has(instance)) return true;
 
@@ -524,7 +658,7 @@
     return true;
   }
 
-  function currentTaskInstance(runtime, taskId) {
+  function currentTaskInstance(runtime: ExplicitDurationRuntime, taskId: string): TaskInstance | null {
     for (const row of runtime.document.querySelectorAll(TASK_ROW_SELECTOR)) {
       if (row.getAttribute("data-item-id") !== taskId) continue;
       const instance = findTaskInstance(row);
@@ -533,13 +667,17 @@
     return null;
   }
 
-  function createSurrogateTaskInstance(runtime, task) {
+  function createSurrogateTaskInstance(
+    runtime: ExplicitDurationRuntime,
+    task: MarvinTask | TaskSnapshot,
+  ): TaskInstance | null {
     const template = runtime.updaterTemplate;
     const taskId = taskIdFromDoc(task);
     if (!template || !taskId) return null;
 
     try {
-      return new template.constructor({
+      const Constructor = template.constructor as unknown as new (props: Record<string, unknown>) => TaskInstance;
+      return new Constructor({
         ...template.props,
         onMogrify: null,
         onUpdate: "default",
@@ -555,7 +693,12 @@
     }
   }
 
-  async function applyCorrection(runtime, task, instance, decision) {
+  async function applyCorrection(
+    runtime: ExplicitDurationRuntime,
+    task: MarvinTask | TaskSnapshot,
+    instance: TaskInstance | null,
+    decision: DurationDecision,
+  ): Promise<void> {
     const taskId = taskIdFromDoc(task);
     if (!taskId || runtime.correctionsInFlight.has(taskId)) return;
 
@@ -605,7 +748,11 @@
     }
   }
 
-  function armParserGuard(runtime, task, decision) {
+  function armParserGuard(
+    runtime: ExplicitDurationRuntime,
+    task: MarvinTask | TaskSnapshot,
+    decision: DurationDecision | null,
+  ): void {
     const taskId = taskIdFromDoc(task);
     if (!taskId || !decision || parseBareDuration(task?.title) <= 0) return;
 
@@ -616,29 +763,35 @@
     });
   }
 
-  function activeParserGuard(runtime, task) {
+  function activeParserGuard(runtime: ExplicitDurationRuntime, task: MarvinTask | TaskSnapshot): ParserGuard | null {
     const taskId = taskIdFromDoc(task);
     const guard = taskId ? runtime.parserGuards.get(taskId) : null;
     if (!guard) return null;
     if (guard.until < Date.now()) {
-      runtime.parserGuards.delete(taskId);
+      if (taskId) runtime.parserGuards.delete(taskId);
       return null;
     }
     return guard.expectedTitle === normalizeTitleForMatch(task.title) ? guard : null;
   }
 
-  function pruneParserGuards(runtime, now = Date.now()) {
+  function pruneParserGuards(runtime: ExplicitDurationRuntime, now = Date.now()): void {
     for (const [taskId, guard] of runtime.parserGuards) {
       if (guard.until < now) runtime.parserGuards.delete(taskId);
     }
   }
 
-  function processTaskChange(runtime, task, beforeTask, instance, isNew) {
+  function processTaskChange(
+    runtime: ExplicitDurationRuntime,
+    task: TaskSnapshot,
+    beforeTask: TaskSnapshot | null,
+    instance: TaskInstance | null,
+    isNew: boolean,
+  ): void {
     const taskId = taskIdFromDoc(task);
     const titleChanged = Boolean(beforeTask && beforeTask.title !== task.title);
     const estimateChanged = Boolean(beforeTask && beforeTask.timeEstimate !== normalizeEstimate(task.timeEstimate));
 
-    if (!isNew && !titleChanged && estimateChanged && !runtime.correctionsInFlight.has(taskId)) {
+    if (!isNew && !titleChanged && estimateChanged && (!taskId || !runtime.correctionsInFlight.has(taskId))) {
       const bare = parseBareDuration(task.title);
       const currentEstimate = normalizeEstimate(task.timeEstimate);
       const guard = activeParserGuard(runtime, task);
@@ -683,7 +836,12 @@
     void applyCorrection(runtime, task, instance, decision);
   }
 
-  function observeTask(runtime, taskValue, instance, initial = false) {
+  function observeTask(
+    runtime: ExplicitDurationRuntime,
+    taskValue: MarvinTask | null | undefined,
+    instance: TaskInstance | null,
+    initial = false,
+  ): void {
     const task = snapshotTask(taskValue);
     const taskId = task?._id;
     if (!task || !taskId) return;
@@ -706,13 +864,13 @@
     }
   }
 
-  function scanDocument(runtime, initial = false) {
+  function scanDocument(runtime: ExplicitDurationRuntime, initial = false): void {
     runtime.scanTimer = null;
     pruneParserGuards(runtime);
 
     runtime.document.querySelectorAll(TASK_INPUT_SELECTOR).forEach((input) => patchTaskInput(input, runtime));
 
-    const seenTaskIds = new Set();
+    const seenTaskIds = new Set<string>();
     for (const row of runtime.document.querySelectorAll(TASK_ROW_SELECTOR)) {
       const taskId = row.getAttribute("data-item-id");
       if (!taskId || seenTaskIds.has(taskId)) continue;
@@ -726,55 +884,59 @@
     }
   }
 
-  function indexedDbRequest(request) {
+  function indexedDbRequest<T>(request: IDBRequest<T>): Promise<T> {
     return new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
   }
 
-  async function getPouchDbNames(windowObject) {
+  async function getPouchDbNames(windowObject: Window): Promise<string[]> {
     if (!windowObject.indexedDB || typeof windowObject.indexedDB.databases !== "function") return [];
     const databases = await windowObject.indexedDB.databases();
-    return databases.map((database) => database.name).filter((name) => name?.startsWith("_pouch_"));
+    return databases.map((database) => database.name).filter((name): name is string => Boolean(name?.startsWith("_pouch_")));
   }
 
-  function readLatestSequence(db) {
+  function readLatestSequence(db: IDBDatabase): Promise<IDBValidKey> {
     return new Promise((resolve, reject) => {
       const transaction = db.transaction("by-sequence", "readonly");
       const request = transaction.objectStore("by-sequence").openCursor(null, "prev");
-      request.onsuccess = (event) => resolve(event.target.result?.key ?? 0);
+      request.onsuccess = () => resolve(request.result?.key ?? 0);
       request.onerror = () => reject(request.error);
     });
   }
 
-  function readChangesAfter(runtime, db, sequence) {
+  function readChangesAfter(
+    runtime: ExplicitDurationRuntime,
+    db: IDBDatabase,
+    sequence: IDBValidKey,
+  ): Promise<PouchChange[]> {
     return new Promise((resolve, reject) => {
       const transaction = db.transaction("by-sequence", "readonly");
       const store = transaction.objectStore("by-sequence");
-      const range = runtime.window.IDBKeyRange.lowerBound(sequence, true);
+      const range = IDBKeyRange.lowerBound(sequence, true);
       const request = store.openCursor(range, "next");
-      const changes = [];
+      const changes: PouchChange[] = [];
 
-      request.onsuccess = (event) => {
-        const cursor = event.target.result;
+      request.onsuccess = () => {
+        const cursor = request.result;
         if (!cursor) {
           resolve(changes);
           return;
         }
 
-        changes.push({ key: cursor.key, doc: cursor.value });
+        changes.push({ key: cursor.key, doc: cursor.value as MarvinTask });
         cursor.continue();
       };
       request.onerror = () => reject(request.error);
     });
   }
 
-  async function initializeDatabaseCursors(runtime) {
+  async function initializeDatabaseCursors(runtime: ExplicitDurationRuntime): Promise<void> {
     const names = await getPouchDbNames(runtime.window);
 
     for (const name of names) {
-      let db;
+      let db: IDBDatabase | undefined;
       try {
         db = await indexedDbRequest(runtime.window.indexedDB.open(name));
         if (!db.objectStoreNames.contains("by-sequence")) continue;
@@ -790,7 +952,7 @@
     runtime.databaseReady = true;
   }
 
-  async function pollDatabases(runtime) {
+  async function pollDatabases(runtime: ExplicitDurationRuntime): Promise<void> {
     if (!runtime.databaseReady || runtime.databasePollInFlight) return;
     runtime.databasePollInFlight = true;
 
@@ -798,7 +960,7 @@
       const names = await getPouchDbNames(runtime.window);
 
       for (const name of names) {
-        let db;
+        let db: IDBDatabase | undefined;
         try {
           db = await indexedDbRequest(runtime.window.indexedDB.open(name));
           if (!db.objectStoreNames.contains("by-sequence")) continue;
@@ -809,6 +971,7 @@
           }
 
           const lastSequence = runtime.databaseSequences.get(name);
+          if (lastSequence === undefined) continue;
           const changes = await readChangesAfter(runtime, db, lastSequence);
           for (const change of changes) {
             runtime.databaseSequences.set(name, change.key);
@@ -828,9 +991,9 @@
     }
   }
 
-  function install(documentObject) {
-    const windowObject = documentObject.defaultView || globalThis;
-    const runtime = {
+  function install(documentObject: Document) {
+    const windowObject = documentObject.defaultView ?? window;
+    const runtime: ExplicitDurationRuntime = {
       correctionsInFlight: new Set(),
       document: documentObject,
       explicitFallbackTimers: new Map(),
@@ -847,6 +1010,7 @@
       databaseReady: false,
       databaseSequences: new Map(),
       updaterTemplate: null,
+      scheduleScan: () => undefined,
       window: windowObject,
     };
 
@@ -855,14 +1019,18 @@
       runtime.scanTimer = windowObject.setTimeout(() => scanDocument(runtime, false), delay);
     };
 
-    const handleKeyDown = (event) => {
+    const handleKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== "Enter" && event.key !== "Tab") return;
-      const input = event.target?.closest?.(TASK_INPUT_SELECTOR);
+      const input = event.target instanceof windowObject.Element
+        ? event.target.closest(TASK_INPUT_SELECTOR)
+        : null;
       if (input) recordTaskInputIntent(runtime, input, `keydown:${event.key}`);
     };
 
-    const handleFocusOut = (event) => {
-      const input = event.target?.closest?.(TASK_INPUT_SELECTOR);
+    const handleFocusOut = (event: FocusEvent): void => {
+      const input = event.target instanceof windowObject.Element
+        ? event.target.closest(TASK_INPUT_SELECTOR)
+        : null;
       if (input) recordTaskInputIntent(runtime, input, "focusout");
     };
 
@@ -885,7 +1053,11 @@
     return {
       installed: true,
       version: VERSION,
-      classify(rawTitle, beforeTask, trustedEstimate) {
+      classify(
+        rawTitle: unknown,
+        beforeTask: MarvinTask | TaskSnapshot | null | undefined,
+        trustedEstimate?: unknown,
+      ) {
         return computeDesiredEstimate(rawTitle, beforeTask, trustedEstimate);
       },
       disconnect() {
@@ -921,7 +1093,7 @@
     };
   }
 
-  return {
+export {
     CORRECTION_DELAY_MS,
     DATABASE_POLL_INTERVAL_MS,
     INTENT_TTL_MS,
@@ -942,5 +1114,4 @@
     parseBareDuration,
     parseExplicitDuration,
     stripExplicitDurationSyntax,
-  };
-});
+};

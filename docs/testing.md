@@ -3,7 +3,7 @@
 `npm run check` is the regular development gate. It performs:
 
 1. WXT and TypeScript validation.
-2. Node regression tests for all five page modules and the popup contract.
+2. Typed Vitest regression tests for all five page modules and the popup contract.
 3. Vitest coverage for settings, permissions, API validation, and security boundaries.
 4. Production Chrome Manifest V3 and Firefox builds.
 5. Mozilla `web-ext lint` with warnings treated as errors.

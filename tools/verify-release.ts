@@ -3,7 +3,11 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import yauzl from "yauzl";
 
-const packageJson = JSON.parse(await readFile("package.json", "utf8"));
+const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
+  license: string;
+  name: string;
+  version: string;
+};
 const version = packageJson.version;
 const expectedIcons = {
   16: "icons/icon-16.png",
@@ -12,7 +16,43 @@ const expectedIcons = {
   128: "icons/icon-128.png",
 };
 
-function readZip(filename) {
+interface ReleaseManifestAction {
+  default_icon: Record<string, string>;
+  default_popup: string;
+}
+
+interface ReleaseManifest {
+  action?: ReleaseManifestAction;
+  browser_action?: ReleaseManifestAction;
+  browser_specific_settings?: {
+    gecko: {
+      data_collection_permissions: {
+        optional: string[];
+        required: string[];
+      };
+      id: string;
+      strict_min_version: string;
+    };
+    gecko_android: {
+      strict_min_version: string;
+    };
+  };
+  content_scripts: Array<{
+    matches: string[];
+    run_at: string;
+  }>;
+  homepage_url: string;
+  host_permissions?: string[];
+  icons: Record<string, string>;
+  manifest_version: number;
+  name: string;
+  optional_host_permissions?: string[];
+  optional_permissions?: string[];
+  permissions: string[];
+  version: string;
+}
+
+function readZip(filename: string): Promise<Map<string, Buffer>> {
   return new Promise((resolve, reject) => {
     yauzl.open(filename, { lazyEntries: true, validateEntrySizes: true }, (openError, zipFile) => {
       if (openError) {
@@ -20,7 +60,11 @@ function readZip(filename) {
         return;
       }
 
-      const entries = new Map();
+      if (!zipFile) {
+        reject(new Error(`Could not open ZIP: ${filename}`));
+        return;
+      }
+      const entries = new Map<string, Buffer>();
       zipFile.on("error", reject);
       zipFile.on("end", () => resolve(entries));
       zipFile.on("entry", (entry) => {
@@ -48,9 +92,13 @@ function readZip(filename) {
             reject(streamError);
             return;
           }
-          const chunks = [];
+          if (!stream) {
+            reject(new Error(`Could not read ZIP entry: ${entry.fileName}`));
+            return;
+          }
+          const chunks: Buffer[] = [];
           stream.on("error", reject);
-          stream.on("data", (chunk) => chunks.push(chunk));
+          stream.on("data", (chunk: Buffer) => chunks.push(chunk));
           stream.on("end", () => {
             entries.set(entry.fileName, Buffer.concat(chunks));
             zipFile.readEntry();
@@ -62,9 +110,9 @@ function readZip(filename) {
   });
 }
 
-async function listFiles(directory, relativeDirectory = "") {
+async function listFiles(directory: string, relativeDirectory = ""): Promise<string[]> {
   const entries = await readdir(path.join(directory, relativeDirectory), { withFileTypes: true });
-  const files = [];
+  const files: string[] = [];
   for (const entry of entries) {
     const relativePath = relativeDirectory
       ? `${relativeDirectory}/${entry.name}`
@@ -75,7 +123,7 @@ async function listFiles(directory, relativeDirectory = "") {
   return files.sort();
 }
 
-function pngDimensions(contents) {
+function pngDimensions(contents: Buffer) {
   assert.equal(contents.subarray(1, 4).toString("ascii"), "PNG");
   return {
     width: contents.readUInt32BE(16),
@@ -86,17 +134,20 @@ function pngDimensions(contents) {
 for (const [browser, outputDirectory] of [
   ["chrome", ".output/chrome-mv3"],
   ["firefox", ".output/firefox-mv2"],
-]) {
-  const manifest = JSON.parse(await readFile(`${outputDirectory}/manifest.json`, "utf8"));
+] as const) {
+  const manifest = JSON.parse(await readFile(`${outputDirectory}/manifest.json`, "utf8")) as ReleaseManifest;
   const action = manifest.action || manifest.browser_action;
+  const [contentScript] = manifest.content_scripts;
+  assert.ok(action, `${browser} manifest does not define an extension action`);
+  assert.ok(contentScript, `${browser} manifest does not define a content script`);
   assert.equal(manifest.version, version);
   assert.equal(manifest.name, "Marvin Enhancement Suite");
   assert.equal(manifest.homepage_url, "https://github.com/rajpiskala/marvin-enhancement-suite");
   assert.deepEqual(manifest.icons, expectedIcons);
   assert.deepEqual(action.default_icon, expectedIcons);
   assert.equal(action.default_popup, "popup.html");
-  assert.deepEqual(manifest.content_scripts[0].matches, ["https://app.amazingmarvin.com/*"]);
-  assert.equal(manifest.content_scripts[0].run_at, "document_start");
+  assert.deepEqual(contentScript.matches, ["https://app.amazingmarvin.com/*"]);
+  assert.equal(contentScript.run_at, "document_start");
 
   if (browser === "chrome") {
     assert.equal(manifest.manifest_version, 3);
@@ -108,6 +159,7 @@ for (const [browser, outputDirectory] of [
     assert.equal(manifest.manifest_version, 2);
     assert.deepEqual(manifest.permissions, ["storage", "https://app.amazingmarvin.com/*"]);
     assert.deepEqual(manifest.optional_permissions, ["https://serv.amazingmarvin.com/*"]);
+    assert.ok(manifest.browser_specific_settings, "Firefox manifest is missing browser-specific settings");
     assert.equal(manifest.browser_specific_settings.gecko.id, "marvin-enhancement-suite@rajpiskala");
     assert.equal(manifest.browser_specific_settings.gecko.strict_min_version, "140.0");
     assert.equal(manifest.browser_specific_settings.gecko_android.strict_min_version, "142.0");
@@ -123,7 +175,7 @@ for (const [browser, outputDirectory] of [
   assert.deepEqual([...archivedFiles.keys()].sort(), outputFiles);
   for (const file of outputFiles) {
     const unpacked = await readFile(path.join(outputDirectory, file));
-    assert.equal(archivedFiles.get(file).equals(unpacked), true, `${browser}/${file} differs in the ZIP`);
+    assert.equal(archivedFiles.get(file)?.equals(unpacked), true, `${browser}/${file} differs in the ZIP`);
     if (file.endsWith(".js")) {
       const source = unpacked.toString("utf8");
       assert.doesNotMatch(source, /\beval\s*\(/);
@@ -133,7 +185,9 @@ for (const [browser, outputDirectory] of [
   }
 
   for (const [size, iconPath] of Object.entries(expectedIcons)) {
-    assert.deepEqual(pngDimensions(archivedFiles.get(iconPath)), {
+    const icon = archivedFiles.get(iconPath);
+    assert.ok(icon, `Archive is missing ${iconPath}`);
+    assert.deepEqual(pngDimensions(icon), {
       width: Number(size),
       height: Number(size),
     });
@@ -148,7 +202,7 @@ for (const required of [
   "package-lock.json",
   "package.json",
   "src/settings.ts",
-  "tools/generate-icons.mjs",
+  "tools/generate-icons.ts",
   "tsconfig.json",
   "wxt.config.ts",
 ]) {
@@ -158,7 +212,9 @@ for (const filename of sourceNames) {
   assert.doesNotMatch(filename, /(^|\/)(?:\.env|\.git|\.output|\.wxt|dev|node_modules)(?:\/|$)/);
   assert.doesNotMatch(filename, /(?:credential|secret|token)s?\.json$/i);
 }
-const reviewerInstructions = sourceArchive.get("docs/amo-source-submission.md").toString("utf8");
+const reviewerInstructionsFile = sourceArchive.get("docs/amo-source-submission.md");
+assert.ok(reviewerInstructionsFile, "Source archive is missing AMO reviewer instructions");
+const reviewerInstructions = reviewerInstructionsFile.toString("utf8");
 assert.match(reviewerInstructions, /npm ci/);
 assert.match(reviewerInstructions, /npm run build-for-amo/);
 assert.match(reviewerInstructions, /Node\.js 22\.13\.0 or newer/);
@@ -175,7 +231,10 @@ for (const [filename, dimensions] of storeAssets) {
   assert.equal(sourceArchive.has(filename), true, `Source archive is missing ${filename}`);
 }
 
-const amoMetadata = JSON.parse(await readFile("amo-metadata.json", "utf8"));
+const amoMetadata = JSON.parse(await readFile("amo-metadata.json", "utf8")) as {
+  summary: Record<string, string>;
+  version: { license: string };
+};
 assert.equal(amoMetadata.summary["en-US"], "Fix Amazing Marvin browser bugs and add opt-in workflow tools.");
 assert.equal(amoMetadata.version.license, packageJson.license);
 assert.match(await readFile("CHANGELOG.md", "utf8"), new RegExp(`^## ${version.replaceAll(".", "\\.")}\\b`, "m"));

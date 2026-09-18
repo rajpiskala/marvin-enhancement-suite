@@ -1,16 +1,23 @@
-const test = require("node:test");
-const assert = require("node:assert/strict");
+import assert from "node:assert/strict";
+import { test } from "vitest";
+import { describe, getCheckboxState, getSelectedTaskItems, isShortcut } from "../src/page/subtask-toggle";
 
-const { describe, getCheckboxState, getSelectedTaskItems, isShortcut } = require("../src/page/subtask-toggle.js");
+interface FakeCheckboxOptions {
+  aria?: string | null;
+  checked?: boolean;
+  className?: string;
+  disabled?: boolean;
+  input?: boolean;
+}
 
-function fakeCheckbox({ input = false, disabled = false, checked = false, aria = null, className = "" } = {}) {
+function fakeCheckbox({ input = false, disabled = false, checked = false, aria = null, className = "" }: FakeCheckboxOptions = {}): Element {
   return {
     disabled,
     checked,
     className,
-    matches: (selector) => input && selector === 'input[type="checkbox"]',
-    getAttribute: (name) => (name === "aria-checked" ? aria : null),
-  };
+    matches: (selector: string) => input && selector === 'input[type="checkbox"]',
+    getAttribute: (name: string) => (name === "aria-checked" ? aria : null),
+  } as unknown as Element;
 }
 
 test("recognizes only the intended keyboard shortcut", () => {
@@ -27,13 +34,16 @@ test("reads native, ARIA, and Marvin checkbox state", () => {
 });
 
 test("describes no-op and completed actions", () => {
-  assert.match(describe({ ok: false, reason: "No selected task found." }), /Alt\+Shift\+D/);
-  assert.equal(describe({ ok: true, changedCount: 2, totalSubtaskCount: 2, action: "checked" }), "Checked 2 subtasks.");
+  assert.match(describe({ ok: false, reason: "No selected task found.", changedCount: 0, taskCount: 0 }), /Alt\+Shift\+D/);
+  assert.equal(
+    describe({ ok: true, changedCount: 2, totalSubtaskCount: 2, taskCount: 1, action: "checked" }),
+    "Checked 2 subtasks.",
+  );
 });
 
 test("falls back to the hovered current-Marvin task when nothing is selected", () => {
   const hovered = {
-    matches: (selector) => selector.includes('[data-uid="SingleTask"]'),
+    matches: (selector: string) => selector.includes('[data-uid="SingleTask"]'),
     querySelector: () => null,
   };
   const documentObject = {
@@ -41,18 +51,24 @@ test("falls back to the hovered current-Marvin task when nothing is selected", (
     querySelectorAll: () => [],
   };
 
-  assert.deepEqual(getSelectedTaskItems(documentObject, hovered), [hovered]);
+  assert.deepEqual(
+    getSelectedTaskItems(documentObject as unknown as Document, hovered as unknown as Element),
+    [hovered],
+  );
 });
 
 test("accepts a hovered subtask list in Marvin's task-details view", () => {
   const hoveredList = {
     matches: () => false,
-    querySelector: (selector) => (selector.includes('data-item-type="subtask"') ? {} : null),
+    querySelector: (selector: string) => (selector.includes('data-item-type="subtask"') ? {} : null),
   };
   const documentObject = {
     activeElement: null,
     querySelectorAll: () => [],
   };
 
-  assert.deepEqual(getSelectedTaskItems(documentObject, hoveredList), [hoveredList]);
+  assert.deepEqual(
+    getSelectedTaskItems(documentObject as unknown as Document, hoveredList as unknown as Element),
+    [hoveredList],
+  );
 });

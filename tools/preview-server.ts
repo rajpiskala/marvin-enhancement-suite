@@ -33,7 +33,7 @@ globalThis.chrome = {
 };
 </script>`;
 
-const mimeTypes = {
+const mimeTypes: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -70,7 +70,8 @@ createServer(async (request, response) => {
     response.writeHead(200, { "content-type": mimeTypes[path.extname(absolutePath)] || "application/octet-stream" });
     response.end(contents);
   } catch (error) {
-    response.writeHead(error?.code === "ENOENT" ? 404 : 500).end(String(error));
+    const status = error && typeof error === "object" && "code" in error && error.code === "ENOENT" ? 404 : 500;
+    response.writeHead(status).end(String(error));
   }
 }).listen(port, "127.0.0.1", () => {
   console.log(`MES preview: http://127.0.0.1:${port}/popup.html?screenshot=1`);

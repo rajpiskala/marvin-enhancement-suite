@@ -69,7 +69,11 @@ async function startFeature(featureId: FeatureId): Promise<void> {
         value: (operation: string, payload: unknown) =>
           browser.runtime.sendMessage({ type: "mes:marvin-api", operation, payload }),
       });
-      await import("../src/page/task-unroller.js");
+      {
+        const { install } = await import("../src/page/task-unroller");
+        const target = globalThis as typeof globalThis & { MESTaskUnroller?: ReturnType<typeof install> };
+        target.MESTaskUnroller ??= install(document);
+      }
       return;
   }
 }

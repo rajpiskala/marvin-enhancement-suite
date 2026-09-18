@@ -1,30 +1,122 @@
-// ==UserScript==
-// @name         Amazing Marvin - Task Unroller
-// @namespace    https://app.amazingmarvin.com/
-// @version      0.7.3
-// @description  Expands a just-created Marvin task like "8:00am Read 20m (1/3)" into "(1/3)", "(2/3)", "(3/3)", etc.
-// @author       Raj Piskala
-// @match        https://app.amazingmarvin.com/*
-// @match        https://amazingmarvin.com/*
-// @grant        GM_getValue
-// @grant        GM_setValue
-// @grant        GM_registerMenuCommand
-// @grant        GM_xmlhttpRequest
-// @connect      serv.amazingmarvin.com
-// @connect      localhost
-// @connect      127.0.0.1
-// ==/UserScript==
+const VERSION = "1.1.0";
 
-(function bootstrap(root, factory) {
-  "use strict";
-  const api = factory();
-  if (typeof module === "object" && module.exports) module.exports = api;
-  if (!root?.document || root.MESTaskUnroller?.installed) return;
-  root.MESTaskUnroller = api.install(root.document);
-})(typeof window === "undefined" ? globalThis : window, function createApi() {
-  "use strict";
+declare global {
+  // Installed by the isolated extension content script before this page module.
+  var __MES_API_REQUEST__: ((operation: string, payload: unknown) => Promise<unknown>) | undefined;
+}
 
-  const VERSION = "1.1.0";
+export interface MarvinTask {
+  [key: string]: unknown;
+  _deleted?: boolean;
+  _doc_id_rev?: string;
+  _id?: string;
+  backburner?: boolean;
+  createdAt?: unknown;
+  db?: string;
+  done?: boolean;
+  inert?: boolean;
+  isInert?: boolean;
+  itemSnoozeTime?: unknown;
+  permaSnoozeTime?: unknown;
+  rank?: number;
+  taskTime?: string;
+  timeEstimate?: number;
+  title?: string;
+}
+
+interface PouchMetadata {
+  data?: string;
+  seq?: IDBValidKey;
+}
+
+interface PouchChange {
+  doc: MarvinTask;
+  key: IDBValidKey;
+}
+
+interface TimeParts {
+  hasSuffix: boolean;
+  hour: number;
+  hourText: string;
+  index: number | null;
+  length: number;
+  minute: number;
+  minuteText: string;
+  padHour: boolean;
+  source: "title" | "taskTime";
+  suffix: string;
+}
+
+interface RawTimeParts {
+  hourText: string;
+  index: number | null;
+  length: number;
+  minuteText: string;
+  source: "title" | "taskTime";
+  suffix: string;
+}
+
+interface LoopMarker {
+  counterWidth: number;
+  endIndex: number;
+  parenthesized: boolean;
+  startIndex: number;
+}
+
+interface LoopRange {
+  end: number;
+  marker: LoopMarker;
+  start: number;
+}
+
+export interface ParsedLoop extends LoopRange {
+  durationMillis: number | null;
+  rawText: string;
+  time: TimeParts | null;
+}
+
+export interface TaskSpec {
+  taskTime?: string;
+  title: string;
+}
+
+export interface AddTaskPayload extends MarvinTask {
+  done: false;
+  title: string;
+}
+
+export interface UnrollReceipt {
+  completedAt?: number;
+  createdTaskIds: string[];
+  createdTitles: string[];
+  error?: string;
+  expandedFirstTitle: string;
+  id: string;
+  originalRenamed?: boolean;
+  originalTaskTime?: string;
+  originalTitle: string;
+  sourceTaskId: string;
+  startedAt: number;
+  status: "started" | "complete" | "partial" | "failed" | "undone";
+  undoneAt?: number;
+  updatedAt?: number;
+}
+
+interface TaskUnrollerRuntime {
+  databasePollInFlight: boolean;
+  databaseReady: boolean;
+  databaseSequences: Map<string, IDBValidKey>;
+}
+
+interface ApiResult {
+  [key: string]: unknown;
+  _id?: string;
+  id?: string;
+  item?: { _id?: string };
+  task?: { _id?: string; id?: string };
+}
+
+type StorageLike = Pick<Storage, "getItem" | "setItem">;
   const BRIDGE_CHANNEL = "marvin-enhancement-suite";
   const RECEIPTS_KEY = "mes.taskUnroller.receipts.v1";
   const MAX_RECEIPTS = 50;
@@ -68,7 +160,7 @@
   ];
 
   const processedTaskIds = new Set();
-  let apiQueue = Promise.resolve();
+  let apiQueue: Promise<unknown> = Promise.resolve();
 
   /*
    * ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -76,7 +168,7 @@
    * ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
    */
 
-  function showToast(message, isError) {
+  function showToast(message: string, isError = false): void {
     document.getElementById("am-task-unroller-toast")?.remove();
 
     const toast = document.createElement("div");
@@ -107,15 +199,15 @@
    * ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
    */
 
-  function sleep(ms) {
+  function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => window.setTimeout(resolve, ms));
   }
 
-  function logProfile(label, details) {
+  function logProfile(label: string, details: Record<string, unknown>): void {
     console.info("[Task Unroller profile]", label, details);
   }
 
-  function queueApiCall(work, delayAfter = API_DELAY_MS, label = "api") {
+  function queueApiCall<T>(work: () => Promise<T>, delayAfter = API_DELAY_MS, label = "api"): Promise<T> {
     const queuedAt = performance.now();
     const result = apiQueue.then(async () => {
       const startedAt = performance.now();
@@ -132,18 +224,18 @@
         logProfile(`${label}:failed`, {
           queueMs: Math.round(startedAt - queuedAt),
           requestMs: Math.round(performance.now() - startedAt),
-          message: error?.message || String(error),
+          message: error instanceof Error ? error.message : String(error),
         });
         throw error;
       }
     });
-    apiQueue = result.catch(() => {}).then(() => sleep(delayAfter));
+    apiQueue = result.catch(() => undefined).then(() => sleep(delayAfter));
     return result;
   }
 
-  function requestViaBridge(operation, payload, timeoutMs = 15_000) {
+  function requestViaBridge<T = unknown>(operation: string, payload: unknown, timeoutMs = 15_000): Promise<T> {
     if (typeof globalThis.__MES_API_REQUEST__ === "function") {
-      return globalThis.__MES_API_REQUEST__(operation, payload);
+      return globalThis.__MES_API_REQUEST__(operation, payload) as Promise<T>;
     }
     return new Promise((resolve, reject) => {
       const id = `mes-unroller-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -152,8 +244,15 @@
         reject(new Error("MES timed out waiting for the Marvin API."));
       }, timeoutMs);
 
-      function handleResponse(event) {
-        const data = event.data;
+      function handleResponse(event: MessageEvent): void {
+        const data = event.data as {
+          channel?: string;
+          direction?: string;
+          error?: string;
+          id?: string;
+          ok?: boolean;
+          result?: T;
+        } | null;
         if (
           event.source !== window ||
           data?.channel !== BRIDGE_CHANNEL ||
@@ -162,7 +261,7 @@
         ) return;
         window.clearTimeout(timer);
         window.removeEventListener("message", handleResponse);
-        if (data.ok) resolve(data.result);
+        if (data.ok) resolve(data.result as T);
         else reject(new Error(data.error || "Marvin API request failed."));
       }
 
@@ -174,25 +273,25 @@
     });
   }
 
-  function readDoc(itemId) {
-    return queueApiCall(() => requestViaBridge("readDoc", { itemId }), 0, "read remote doc");
+  function readDoc(itemId: string): Promise<MarvinTask> {
+    return queueApiCall(() => requestViaBridge<MarvinTask>("readDoc", { itemId }), 0, "read remote doc");
   }
 
-  function indexedDbRequest(request) {
+  function indexedDbRequest<T>(request: IDBRequest<T>): Promise<T> {
     return new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
   }
 
-  async function getPouchDbNames() {
+  async function getPouchDbNames(): Promise<string[]> {
     if (!window.indexedDB) return [];
 
     if (typeof indexedDB.databases === "function") {
       try {
         const databases = await indexedDB.databases();
-        return databases.map((database) => database.name).filter((name) => name?.startsWith("_pouch_"));
-      } catch (_) {
+        return databases.map((database) => database.name).filter((name): name is string => Boolean(name?.startsWith("_pouch_")));
+      } catch {
         // Fall through to the localStorage hint below.
       }
     }
@@ -200,30 +299,34 @@
     return Object.keys(localStorage).filter((key) => key.startsWith("_pouch_"));
   }
 
-  async function openIndexedDb(name) {
+  async function openIndexedDb(name: string): Promise<IDBDatabase> {
     return indexedDbRequest(indexedDB.open(name));
   }
 
-  function normalizeLocalDoc(doc, itemId) {
-    if (!doc || doc._deleted) return null;
+  function normalizeLocalDoc(doc: unknown, itemId: string): MarvinTask | null {
+    if (!doc || typeof doc !== "object") return null;
+    const candidate = doc as MarvinTask;
+    if (candidate._deleted) return null;
 
-    const docId = doc._id || String(doc._doc_id_rev || "").split("::")[0] || itemId;
+    const docId = candidate._id || String(candidate._doc_id_rev || "").split("::")[0] || itemId;
     if (docId !== itemId) return null;
 
     return {
-      ...doc,
+      ...candidate,
       _id: docId,
     };
   }
 
-  async function readLocalDocFromDb(db, itemId) {
+  async function readLocalDocFromDb(db: IDBDatabase, itemId: string): Promise<MarvinTask | null> {
     if (!db.objectStoreNames.contains("document-store") || !db.objectStoreNames.contains("by-sequence")) {
       return null;
     }
 
     const metaTransaction = db.transaction("document-store", "readonly");
-    const meta = await indexedDbRequest(metaTransaction.objectStore("document-store").get(itemId));
-    const seq = meta?.seq ?? (meta?.data ? JSON.parse(meta.data).seq : null);
+    const rawMeta = await indexedDbRequest(metaTransaction.objectStore("document-store").get(itemId));
+    const meta = rawMeta && typeof rawMeta === "object" ? rawMeta as PouchMetadata : {};
+    const parsed = meta.data ? JSON.parse(meta.data) as PouchMetadata : null;
+    const seq = meta.seq ?? parsed?.seq;
     if (seq == null) return readLocalDocByCursor(db, itemId);
 
     const docTransaction = db.transaction("by-sequence", "readonly");
@@ -231,13 +334,13 @@
       readLocalDocByCursor(db, itemId);
   }
 
-  function readLocalDocByCursor(db, itemId) {
+  function readLocalDocByCursor(db: IDBDatabase, itemId: string): Promise<MarvinTask | null> {
     return new Promise((resolve, reject) => {
       const transaction = db.transaction("by-sequence", "readonly");
       const request = transaction.objectStore("by-sequence").openCursor(null, "prev");
 
-      request.onsuccess = (event) => {
-        const cursor = event.target.result;
+      request.onsuccess = () => {
+        const cursor = request.result;
         if (!cursor) {
           resolve(null);
           return;
@@ -256,11 +359,11 @@
     });
   }
 
-  async function readLocalDoc(itemId) {
+  async function readLocalDoc(itemId: string): Promise<MarvinTask | null> {
     const dbNames = await getPouchDbNames();
 
     for (const dbName of dbNames) {
-      let db = null;
+      let db: IDBDatabase | null = null;
       try {
         db = await openIndexedDb(dbName);
         const doc = await readLocalDocFromDb(db, itemId);
@@ -275,48 +378,50 @@
     return null;
   }
 
-  function taskIdFromDoc(task) {
+  function taskIdFromDoc(task: MarvinTask | null | undefined): string | null {
     if (task?._id) return task._id;
     return String(task?._doc_id_rev || "").split("::")[0] || null;
   }
 
-  function looksLikeMarvinTask(task) {
-    return Boolean(task && !task._deleted && task.db === "Tasks" && taskIdFromDoc(task) && typeof task.title === "string");
+  function looksLikeMarvinTask(task: unknown): task is MarvinTask {
+    if (!task || typeof task !== "object") return false;
+    const candidate = task as MarvinTask;
+    return Boolean(!candidate._deleted && candidate.db === "Tasks" && taskIdFromDoc(candidate) && typeof candidate.title === "string");
   }
 
-  function readLatestSequence(db) {
+  function readLatestSequence(db: IDBDatabase): Promise<IDBValidKey> {
     return new Promise((resolve, reject) => {
       const transaction = db.transaction("by-sequence", "readonly");
       const request = transaction.objectStore("by-sequence").openCursor(null, "prev");
-      request.onsuccess = (event) => resolve(event.target.result?.key ?? 0);
+      request.onsuccess = () => resolve(request.result?.key ?? 0);
       request.onerror = () => reject(request.error);
     });
   }
 
-  function readChangesAfter(db, sequence) {
+  function readChangesAfter(db: IDBDatabase, sequence: IDBValidKey): Promise<PouchChange[]> {
     return new Promise((resolve, reject) => {
       const transaction = db.transaction("by-sequence", "readonly");
       const store = transaction.objectStore("by-sequence");
       const request = store.openCursor(IDBKeyRange.lowerBound(sequence, true), "next");
-      const changes = [];
-      request.onsuccess = (event) => {
-        const cursor = event.target.result;
+      const changes: PouchChange[] = [];
+      request.onsuccess = () => {
+        const cursor = request.result;
         if (!cursor) return resolve(changes);
-        changes.push({ key: cursor.key, doc: cursor.value });
+        changes.push({ key: cursor.key, doc: cursor.value as MarvinTask });
         cursor.continue();
       };
       request.onerror = () => reject(request.error);
     });
   }
 
-  async function readTaskDoc(itemId) {
+  async function readTaskDoc(itemId: string): Promise<MarvinTask> {
     const localDoc = await readLocalDoc(itemId);
     if (localDoc?._id) return localDoc;
     return readDocWithRetry(itemId);
   }
 
-  async function readDocWithRetry(itemId) {
-    let lastError = null;
+  async function readDocWithRetry(itemId: string): Promise<MarvinTask> {
+    let lastError: unknown = null;
 
     for (let attempt = 0; attempt < DOC_READ_RETRIES; attempt += 1) {
       try {
@@ -331,9 +436,13 @@
     throw lastError || new Error(`Could not read created Marvin task ${itemId}.`);
   }
 
-  function updateTaskFields(itemId, fields, label = "update task") {
+  function updateTaskFields(
+    itemId: string,
+    fields: Record<string, unknown>,
+    label = "update task",
+  ): Promise<unknown> {
     const now = Date.now();
-    const setters = [];
+    const setters: Array<{ key: string; val: unknown }> = [];
     for (const [key, val] of Object.entries(fields)) {
       setters.push({ key, val });
       setters.push({ key: `fieldUpdates.${key}`, val: now });
@@ -342,15 +451,15 @@
     return queueApiCall(() => requestViaBridge("updateDoc", { itemId, setters }), undefined, label);
   }
 
-  function updateOriginalTask(itemId, spec) {
-    const fields = { title: spec.title };
+  function updateOriginalTask(itemId: string, spec: TaskSpec): Promise<unknown> {
+    const fields: Record<string, unknown> = { title: spec.title };
     if (Object.prototype.hasOwnProperty.call(spec, "taskTime")) fields.taskTime = spec.taskTime;
     return updateTaskFields(itemId, fields, "update original task");
   }
 
-  function addTask(task) {
+  function addTask(task: AddTaskPayload): Promise<ApiResult> {
     return queueApiCall(
-      () => requestViaBridge("addTask", { ...task, timeZoneOffset: -new Date().getTimezoneOffset() }),
+      () => requestViaBridge<ApiResult>("addTask", { ...task, timeZoneOffset: -new Date().getTimezoneOffset() }),
       undefined,
       `add task: ${task.title}`,
     );
@@ -362,7 +471,7 @@
    * ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
    */
 
-  function parseDurationMillis(text) {
+  function parseDurationMillis(text: unknown): number | null {
     const source = String(text || "");
     const match =
       source.match(/(?:^|\s)(?:~|ca\.?\s*)(\d+(?:\.\d+)?)\s*(hours?|hrs?|h|minutes?|mins?|m)\b/i) ||
@@ -372,40 +481,40 @@
     const amount = Number(match[1]);
     if (!Number.isFinite(amount) || amount <= 0) return null;
 
-    return Math.round(amount * (match[2].toLowerCase().startsWith("h") ? 60 : 1) * 60 * 1000);
+    return Math.round(amount * (match[2]!.toLowerCase().startsWith("h") ? 60 : 1) * 60 * 1000);
   }
 
-  function parseTitleTime(text) {
+  function parseTitleTime(text: unknown): TimeParts | null {
     const match =
       String(text || "").match(/^(\s*)(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i) ||
       String(text || "").match(/(^|\s)(\d{1,2})(?:(?::(\d{2}))\s*(am|pm)?|\s+(am|pm))\b/i);
     if (!match) return null;
 
     return normalizeTimeParts({
-      index: match.index + match[1].length,
-      length: match[0].length - match[1].length,
-      hourText: match[2],
+      index: (match.index ?? 0) + match[1]!.length,
+      length: match[0].length - match[1]!.length,
+      hourText: match[2]!,
       minuteText: match[3] ?? "00",
       suffix: match[4] || match[5] || "",
       source: "title",
     });
   }
 
-  function parseStoredTaskTime(taskTime) {
+  function parseStoredTaskTime(taskTime: unknown): TimeParts | null {
     const match = String(taskTime || "").match(/^(\d{1,2}):(\d{2})$/);
     if (!match) return null;
 
     return normalizeTimeParts({
       index: null,
       length: 0,
-      hourText: match[1],
-      minuteText: match[2],
+      hourText: match[1]!,
+      minuteText: match[2]!,
       suffix: "",
       source: "taskTime",
     });
   }
 
-  function normalizeTimeParts(parts) {
+  function normalizeTimeParts(parts: RawTimeParts): TimeParts | null {
     let hour = Number(parts.hourText);
     const minute = Number(parts.minuteText);
     if (!Number.isInteger(hour) || !Number.isInteger(minute) || minute < 0 || minute > 59) return null;
@@ -428,7 +537,7 @@
     };
   }
 
-  function formatShiftedTime(time, offsetMillis) {
+  function formatShiftedTime(time: TimeParts, offsetMillis: number): string {
     const totalMinutes = (time.hour * 60 + time.minute + Math.round(offsetMillis / 60000)) % 1440;
     const normalizedMinutes = totalMinutes < 0 ? totalMinutes + 1440 : totalMinutes;
     let hour = Math.floor(normalizedMinutes / 60);
@@ -448,9 +557,9 @@
     return `${time.padHour ? String(hour).padStart(2, "0") : String(hour)}:${String(minute).padStart(2, "0")}`;
   }
 
-  function getRangeLoopMarker(text, loopMatch) {
-    let startIndex = loopMatch.index;
-    let endIndex = loopMatch.index + loopMatch[0].length;
+  function getRangeLoopMarker(text: string, loopMatch: RegExpMatchArray): LoopMarker {
+    let startIndex = loopMatch.index ?? 0;
+    let endIndex = startIndex + loopMatch[0].length;
     let parenthesized = false;
 
     const openMatch = text.slice(0, startIndex).match(/\(\s*$/);
@@ -465,16 +574,16 @@
       startIndex,
       endIndex,
       parenthesized,
-      counterWidth: loopMatch[1].length,
+      counterWidth: loopMatch[1]!.length,
     };
   }
 
-  function expansionCount(start, end) {
+  function expansionCount(start: number, end: number): number | null {
     if (!Number.isInteger(start) || !Number.isInteger(end) || end < start) return null;
     return end - start + 1;
   }
 
-  function assertSafeExpansionCount(start, end) {
+  function assertSafeExpansionCount(start: number, end: number): number {
     const count = expansionCount(start, end);
     if (count == null) throw new Error("The task-unroll range is invalid.");
     if (count > MAX_EXPANSION_COUNT) {
@@ -483,16 +592,16 @@
     return count;
   }
 
-  function getNaturalLoopMarker(loopMatch) {
+  function getNaturalLoopMarker(loopMatch: RegExpMatchArray): LoopMarker {
     return {
-      startIndex: loopMatch.index,
-      endIndex: loopMatch.index + loopMatch[0].length,
+      startIndex: loopMatch.index ?? 0,
+      endIndex: (loopMatch.index ?? 0) + loopMatch[0].length,
       parenthesized: true,
       counterWidth: 1,
     };
   }
 
-  function parseRangeLoop(rawText) {
+  function parseRangeLoop(rawText: string): LoopRange | null {
     const loopMatch = rawText.match(RANGE_LOOP_PATTERN);
     if (!loopMatch) return null;
 
@@ -508,14 +617,14 @@
     };
   }
 
-  function getLoopCandidateType(text) {
+  function getLoopCandidateType(text: unknown): "range" | "natural" | "" {
     const rawText = String(text || "");
     if (RANGE_LOOP_PATTERN.test(rawText)) return "range";
     if (NATURAL_LOOP_PATTERN.test(rawText)) return "natural";
     return "";
   }
 
-  function getLoopCandidateCount(text) {
+  function getLoopCandidateCount(text: unknown): number | null {
     const rawText = String(text || "");
     const rangeMatch = rawText.match(RANGE_LOOP_PATTERN);
     if (rangeMatch) {
@@ -531,7 +640,7 @@
     return Number.isInteger(end) && end >= 2 ? expansionCount(1, end) : null;
   }
 
-  function parseNaturalLoop(rawText, doc, time) {
+  function parseNaturalLoop(rawText: string, _doc: MarvinTask | null | undefined, _time: TimeParts | null): LoopRange | null {
     const loopMatch = rawText.match(NATURAL_LOOP_PATTERN);
     if (!loopMatch) return null;
 
@@ -546,7 +655,7 @@
     };
   }
 
-  function replaceLoopMarker(text, loop, counter) {
+  function replaceLoopMarker(text: string, loop: ParsedLoop, counter: number): string {
     const counterText = String(counter).padStart(loop.marker.counterWidth, "0");
     const replacement = loop.marker.parenthesized ? `(${counterText}/${loop.end})` : counterText;
     return `${text.slice(0, loop.marker.startIndex)}${replacement}${text.slice(loop.marker.endIndex)}`
@@ -554,12 +663,13 @@
       .trim();
   }
 
-  function replaceTitleTime(text, time, offsetMillis) {
+  function replaceTitleTime(text: string, time: TimeParts | null, offsetMillis: number): string {
     if (!time || time.source !== "title") return text;
-    return `${text.slice(0, time.index)}${formatShiftedTime(time, offsetMillis)}${text.slice(time.index + time.length)}`;
+    const index = time.index ?? 0;
+    return `${text.slice(0, index)}${formatShiftedTime(time, offsetMillis)}${text.slice(index + time.length)}`;
   }
 
-  function parseLoop(text, doc) {
+  function parseLoop(text: unknown, doc: MarvinTask | null | undefined): ParsedLoop | null {
     const rawText = String(text || "");
     const time = parseTitleTime(rawText) || parseStoredTaskTime(doc?.taskTime);
     const parsedLoop = parseRangeLoop(rawText) || parseNaturalLoop(rawText, doc, time);
@@ -580,13 +690,13 @@
     };
   }
 
-  function expandLoop(loop) {
-    const specs = [];
+  function expandLoop(loop: ParsedLoop): TaskSpec[] {
+    const specs: TaskSpec[] = [];
 
     for (let counter = loop.start; counter <= loop.end; counter += 1) {
       const offset = loop.durationMillis ? loop.durationMillis * (counter - loop.start) : 0;
       const title = replaceTitleTime(replaceLoopMarker(loop.rawText, loop, counter), loop.time, offset);
-      const spec = { title };
+      const spec: TaskSpec = { title };
       if (loop.time?.source === "taskTime") spec.taskTime = formatShiftedTime(loop.time, offset);
       specs.push(spec);
     }
@@ -600,12 +710,12 @@
    * ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
    */
 
-  function copyIfPresent(target, source, key) {
+  function copyIfPresent(target: Record<string, unknown>, source: MarvinTask, key: string): void {
     if (source?.[key] != null && source[key] !== "") target[key] = source[key];
   }
 
-  function buildAddTaskPayload(originalTask, spec, index) {
-    const payload = {
+  function buildAddTaskPayload(originalTask: MarvinTask, spec: TaskSpec, index: number): AddTaskPayload {
+    const payload: AddTaskPayload = {
       title: spec.title,
       done: false,
     };
@@ -619,7 +729,7 @@
     return payload;
   }
 
-  function parseTimestampMillis(value) {
+  function parseTimestampMillis(value: unknown): number | null {
     if (typeof value === "number" && Number.isFinite(value)) {
       return value < 100000000000 ? value * 1000 : value;
     }
@@ -632,13 +742,13 @@
     return null;
   }
 
-  function isRecentlyCreatedTask(task) {
+  function isRecentlyCreatedTask(task: MarvinTask | null | undefined): boolean {
     const createdAt = parseTimestampMillis(task?.createdAt);
     if (createdAt == null) return true;
     return Date.now() - createdAt <= MAX_TRIGGER_TASK_AGE_MS;
   }
 
-  function isInactiveTask(task) {
+  function isInactiveTask(task: MarvinTask | null | undefined): boolean {
     return Boolean(
       task?.done ||
         task?.inert ||
@@ -649,56 +759,56 @@
     );
   }
 
-  function getUnrollSkipReason(task, title) {
+  function getUnrollSkipReason(task: MarvinTask | null | undefined, _title?: string): string {
     if (isInactiveTask(task)) return "inactive";
     if (!isRecentlyCreatedTask(task)) return "not newly created";
     return "";
   }
 
-  function loadReceipts(storage = window.localStorage) {
+  function loadReceipts(storage: StorageLike = window.localStorage): UnrollReceipt[] {
     try {
       const parsed = JSON.parse(storage.getItem(RECEIPTS_KEY) || "[]");
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (_) {
+      return Array.isArray(parsed) ? parsed as UnrollReceipt[] : [];
+    } catch {
       return [];
     }
   }
 
-  function saveReceipts(receipts, storage = window.localStorage) {
+  function saveReceipts(receipts: UnrollReceipt[], storage: StorageLike = window.localStorage): void {
     storage.setItem(RECEIPTS_KEY, JSON.stringify(receipts.slice(-MAX_RECEIPTS)));
   }
 
-  function receiptForTask(taskId, storage = window.localStorage) {
+  function receiptForTask(taskId: string, storage: StorageLike = window.localStorage): UnrollReceipt | null {
     return loadReceipts(storage).findLast?.((receipt) => receipt.sourceTaskId === taskId) ||
       [...loadReceipts(storage)].reverse().find((receipt) => receipt.sourceTaskId === taskId) ||
       null;
   }
 
-  function putReceipt(receipt, storage = window.localStorage) {
+  function putReceipt(receipt: UnrollReceipt, storage: StorageLike = window.localStorage): UnrollReceipt {
     const receipts = loadReceipts(storage).filter((item) => item.id !== receipt.id);
     receipts.push({ ...receipt, updatedAt: Date.now() });
     saveReceipts(receipts, storage);
     return receipt;
   }
 
-  function clearReceipt(taskId, storage = window.localStorage) {
+  function clearReceipt(taskId: string, storage: StorageLike = window.localStorage): void {
     const receipts = loadReceipts(storage).filter((receipt) => receipt.sourceTaskId !== taskId);
     saveReceipts(receipts, storage);
   }
 
-  function createdTaskId(response) {
+  function createdTaskId(response: ApiResult | null | undefined): string | null {
     const candidates = [response?._id, response?.id, response?.task?._id, response?.task?.id, response?.item?._id];
-    return candidates.find((value) => typeof value === "string" && value) || null;
+    return candidates.find((value): value is string => typeof value === "string" && Boolean(value)) || null;
   }
 
-  function requireConfirmation(count, title, confirmFn = window.confirm) {
+  function requireConfirmation(count: number, title: string, confirmFn: (message: string) => boolean = window.confirm): boolean {
     if (count <= CONFIRM_EXPANSION_COUNT) return true;
     return confirmFn(
       `Marvin Enhancement Suite will expand this task into ${count} tasks:\n\n${title}\n\nContinue?`,
     );
   }
 
-  async function undoReceipt(receiptOrId) {
+  async function undoReceipt(receiptOrId?: UnrollReceipt | string): Promise<UnrollReceipt> {
     const receipts = loadReceipts();
     const receipt =
       typeof receiptOrId === "string"
@@ -714,7 +824,7 @@
     for (const itemId of [...receipt.createdTaskIds].reverse()) {
       await updateTaskFields(itemId, { deletedAt: now }, `trash unrolled task ${itemId}`);
     }
-    const restore = { title: receipt.originalTitle };
+    const restore: Record<string, unknown> = { title: receipt.originalTitle };
     if (receipt.originalTaskTime !== undefined) restore.taskTime = receipt.originalTaskTime;
     await updateTaskFields(receipt.sourceTaskId, restore, "restore original task");
     receipt.status = "undone";
@@ -724,15 +834,16 @@
     return receipt;
   }
 
-  async function isOriginalStillUnrollable(taskId, expectedTitles) {
+  async function isOriginalStillUnrollable(taskId: string, expectedTitles: string | string[]): Promise<boolean> {
     const startedAt = performance.now();
     const allowedTitles = Array.isArray(expectedTitles) ? expectedTitles : [expectedTitles];
     const currentTask = await readLocalDoc(taskId);
+    const currentTitle = currentTask?.title ?? "";
     const alive =
       Boolean(currentTask?._id) &&
-      allowedTitles.includes(currentTask.title) &&
-      !getUnrollSkipReason(currentTask, currentTask.title) &&
-      LOOP_CANDIDATE_PATTERN.test(currentTask.title || "");
+      allowedTitles.includes(currentTitle) &&
+      !getUnrollSkipReason(currentTask, currentTitle) &&
+      LOOP_CANDIDATE_PATTERN.test(currentTitle);
 
     logProfile("check original task", {
       taskId,
@@ -742,7 +853,7 @@
     return alive;
   }
 
-  async function unrollTask(taskId, titleHint) {
+  async function unrollTask(taskId: string, titleHint: string): Promise<boolean> {
     const startedAt = performance.now();
     logProfile("unroll started", { taskId, titleHint });
 
@@ -792,7 +903,7 @@
     const receipt = putReceipt({
       id: `unroll-${taskId}-${Date.now()}`,
       sourceTaskId: taskId,
-      originalTitle: originalTask.title,
+      originalTitle: originalTask.title || title,
       originalTaskTime: originalTask.taskTime,
       expandedFirstTitle: first.title,
       createdTaskIds: [],
@@ -803,15 +914,15 @@
 
     try {
       let renamedOriginal = false;
-      let expectedOriginalTitles = [originalTask.title];
+      let expectedOriginalTitles = [title];
       if (first.title !== originalTask.title || (first.taskTime && first.taskTime !== originalTask.taskTime)) {
-        if (!(await isOriginalStillUnrollable(originalTask._id, originalTask.title))) {
+        if (!(await isOriginalStillUnrollable(originalTask._id, title))) {
           throw new Error("Cancelled because the original task changed or was deleted.");
         }
 
         await updateOriginalTask(originalTask._id, first);
         renamedOriginal = true;
-        expectedOriginalTitles = [originalTask.title, first.title];
+        expectedOriginalTitles = [title, first.title];
         receipt.originalRenamed = true;
         putReceipt(receipt);
       }
@@ -821,7 +932,9 @@
           throw new Error(`Cancelled before adding task ${index + 2}/${rest.length + 1} because the original changed.`);
         }
 
-        const payload = buildAddTaskPayload(originalTask, rest[index], index + 1);
+        const spec = rest[index];
+        if (!spec) throw new Error(`Missing task specification ${index + 2}/${rest.length + 1}.`);
+        const payload = buildAddTaskPayload(originalTask, spec, index + 1);
         const created = await addTask(payload);
         receipt.createdTitles.push(payload.title);
         const createdId = createdTaskId(created);
@@ -841,7 +954,7 @@
       return true;
     } catch (error) {
       receipt.status = receipt.createdTitles.length ? "partial" : "failed";
-      receipt.error = error?.message || String(error);
+      receipt.error = error instanceof Error ? error.message : String(error);
       putReceipt(receipt);
       throw new Error(
         `${receipt.error} MES recorded ${receipt.createdTitles.length} created ${receipt.createdTitles.length === 1 ? "task" : "tasks"} and will block automatic retry.`,
@@ -855,15 +968,15 @@
    * ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
    */
 
-  function taskIdFromElement(taskElement) {
+  function taskIdFromElement(taskElement: Element): string {
     return taskElement.getAttribute("data-item-id") || taskElement.querySelector("[data-uid]")?.getAttribute("data-uid") || "";
   }
 
-  function taskTitleFromElement(taskElement) {
+  function taskTitleFromElement(taskElement: Element): string {
     return taskElement.querySelector(TITLE_SELECTOR)?.textContent?.trim() || "";
   }
 
-  function handleTaskCandidate(taskId, title) {
+  function handleTaskCandidate(taskId: string | null, title: string): void {
     if (!taskId || processedTaskIds.has(taskId)) return;
     if (!LOOP_CANDIDATE_PATTERN.test(title)) return;
 
@@ -872,18 +985,18 @@
     showToast(count ? `Detected loop task. Unrolling into ${count} tasks...` : "Detected loop task. Unrolling...");
     unrollTask(taskId, title).catch((error) => {
       console.error("[Task Unroller]", error);
-      showToast(error.message, true);
+      showToast(error instanceof Error ? error.message : String(error), true);
     });
   }
 
-  function handleAddedTask(taskElement) {
+  function handleAddedTask(taskElement: Element): void {
     handleTaskCandidate(taskIdFromElement(taskElement), taskTitleFromElement(taskElement));
   }
 
-  async function initializeDatabaseCursors(runtime) {
+  async function initializeDatabaseCursors(runtime: TaskUnrollerRuntime): Promise<void> {
     const names = await getPouchDbNames();
     for (const name of names) {
-      let db;
+      let db: IDBDatabase | undefined;
       try {
         db = await openIndexedDb(name);
         if (db.objectStoreNames.contains("by-sequence")) {
@@ -898,13 +1011,13 @@
     runtime.databaseReady = true;
   }
 
-  async function pollDatabases(runtime) {
+  async function pollDatabases(runtime: TaskUnrollerRuntime): Promise<void> {
     if (!runtime.databaseReady || runtime.databasePollInFlight) return;
     runtime.databasePollInFlight = true;
     try {
       const names = await getPouchDbNames();
       for (const name of names) {
-        let db;
+        let db: IDBDatabase | undefined;
         try {
           db = await openIndexedDb(name);
           if (!db.objectStoreNames.contains("by-sequence")) continue;
@@ -912,11 +1025,13 @@
             runtime.databaseSequences.set(name, await readLatestSequence(db));
             continue;
           }
-          const changes = await readChangesAfter(db, runtime.databaseSequences.get(name));
+          const lastSequence = runtime.databaseSequences.get(name);
+          if (lastSequence === undefined) continue;
+          const changes = await readChangesAfter(db, lastSequence);
           for (const change of changes) {
             runtime.databaseSequences.set(name, change.key);
             if (!looksLikeMarvinTask(change.doc)) continue;
-            handleTaskCandidate(taskIdFromDoc(change.doc), change.doc.title);
+            handleTaskCandidate(taskIdFromDoc(change.doc), change.doc.title ?? "");
           }
         } catch (error) {
           console.warn("[MES Task Unroller] Marvin database polling failed safely.", name, error);
@@ -929,9 +1044,9 @@
     }
   }
 
-  function observeAddedTasks(documentObject) {
-    const windowObject = documentObject.defaultView || window;
-    const observer = new windowObject.MutationObserver((mutations) => {
+  function observeAddedTasks(documentObject: Document): MutationObserver {
+    const windowObject = documentObject.defaultView ?? window;
+    const observer = new windowObject.MutationObserver((mutations: MutationRecord[]) => {
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {
           if (!(node instanceof windowObject.Element)) continue;
@@ -945,9 +1060,9 @@
     return observer;
   }
 
-  function install(documentObject) {
+  function install(documentObject: Document) {
     const observer = observeAddedTasks(documentObject);
-    const runtime = {
+    const runtime: TaskUnrollerRuntime = {
       databasePollInFlight: false,
       databaseReady: false,
       databaseSequences: new Map(),
@@ -978,7 +1093,7 @@
     };
   }
 
-  return {
+export {
     CONFIRM_EXPANSION_COUNT,
     MAX_EXPANSION_COUNT,
     VERSION,
@@ -1003,5 +1118,4 @@
     requireConfirmation,
     unrollTask,
     undoReceipt,
-  };
-});
+};

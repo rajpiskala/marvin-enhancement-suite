@@ -1,32 +1,44 @@
-const test = require("node:test");
-const assert = require("node:assert/strict");
-
-const {
+import assert from "node:assert/strict";
+import { test } from "vitest";
+import {
   RETRY_DELAYS_MS,
   createSafeAddDeleter,
   createStats,
   findTaskInputInstance,
   hasPendingMention,
   patchTaskInput,
-} = require("../src/page/autocomplete-cleanup.js");
+} from "../src/page/autocomplete-cleanup";
 
-function makeSchedulers() {
-  const microtasks = [];
-  const timeouts = [];
+type Callback = () => void;
+interface SchedulerHarness {
+  microtasks: Callback[];
+  timeouts: Array<{ callback: Callback; delay: number }>;
+  queueMicrotask(callback: Callback): void;
+  setTimeout(callback: Callback, delay: number): void;
+}
+
+interface FakeInputInstance {
+  props: { noDeletes?: boolean };
+  state: { value: string };
+}
+
+function makeSchedulers(): SchedulerHarness {
+  const microtasks: Callback[] = [];
+  const timeouts: Array<{ callback: Callback; delay: number }> = [];
 
   return {
     microtasks,
     timeouts,
-    queueMicrotask(callback) {
+    queueMicrotask(callback: Callback) {
       microtasks.push(callback);
     },
-    setTimeout(callback, delay) {
+    setTimeout(callback: Callback, delay: number) {
       timeouts.push({ callback, delay });
     },
   };
 }
 
-function makeMarvinDeleter(instance, marker, addTrailingSpace = true) {
+function makeMarvinDeleter(instance: FakeInputInstance, marker: string, addTrailingSpace = true): Callback {
   return () => {
     let value = instance.state.value;
     const index = value.lastIndexOf(marker);
@@ -91,7 +103,7 @@ test("waits for a marker that has not reached React state yet", () => {
     instance.state.value = "Task";
   });
   instance.state.value = `Task${marker}`;
-  schedulers.microtasks.shift()();
+  schedulers.microtasks.shift()?.();
 
   assert.equal(calls, 1);
   assert.equal(stats.retriesScheduled, 1);
@@ -109,9 +121,9 @@ test("never invokes Marvin's unsafe deleter when its marker never appears", () =
   safeAddDeleter.call(instance, () => {
     calls += 1;
   });
-  schedulers.microtasks.shift()();
+  schedulers.microtasks.shift()?.();
   while (schedulers.timeouts.length > 0) {
-    schedulers.timeouts.shift().callback();
+    schedulers.timeouts.shift()?.callback();
   }
 
   assert.equal(calls, 0);
@@ -128,7 +140,7 @@ test("eliminates the rapid double-Enter submit race", () => {
   delayed.push(makeMarvinDeleter(broken, marker));
   const brokenStoredTitle = broken.state.value;
   broken.state.value = "";
-  delayed.shift()();
+  delayed.shift()?.();
 
   assert.equal(brokenStoredTitle, `Task${marker}`);
   assert.equal(broken.state.value, " ");
@@ -158,7 +170,7 @@ test("finds and patches a TaskInput React class instance once", () => {
       stateNode: null,
       return: { stateNode: instance, return: null },
     },
-    matches(selector) {
+    matches(selector: string) {
       return selector === ".TaskInput__input";
     },
   };
@@ -169,9 +181,9 @@ test("finds and patches a TaskInput React class instance once", () => {
   };
 
   assert.equal(findTaskInputInstance(input), instance);
-  assert.equal(patchTaskInput(input, runtime), true);
+  assert.equal(patchTaskInput(input as unknown as Element, runtime), true);
   const patchedMethod = instance.addDeleter;
-  assert.equal(patchTaskInput(input, runtime), true);
+  assert.equal(patchTaskInput(input as unknown as Element, runtime), true);
   assert.equal(instance.addDeleter, patchedMethod);
   assert.equal(runtime.stats.inputsSeen, 1);
   assert.equal(runtime.stats.instancesPatched, 1);

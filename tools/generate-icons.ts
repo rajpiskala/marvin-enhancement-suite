@@ -28,7 +28,7 @@ await copyFile(path.join(iconDirectory, "icon-128.png"), path.join(storeDirector
 for (const [sourceName, outputName] of [
   ["promo-small.svg", "promo-small-440x280.png"],
   ["promo-marquee.svg", "promo-marquee-1400x560.png"],
-]) {
+] as const) {
   const artwork = await readFile(path.join(projectRoot, "assets", sourceName));
   const png = new Resvg(artwork).render().asPng();
   await writeFile(path.join(storeDirectory, outputName), png);

@@ -1,7 +1,19 @@
-const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
-const test = require("node:test");
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { test } from "vitest";
+
+const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
+
+interface ExtensionManifest {
+  action?: { default_popup?: string };
+  browser_action?: { default_popup?: string };
+  optional_host_permissions?: string[];
+  optional_permissions?: string[];
+  options_ui?: unknown;
+  web_accessible_resources?: Array<string | string[] | { resources?: string[] }>;
+}
 
 const REQUIRED_PAGE_SCRIPTS = [
   "autocomplete-main.js",
@@ -10,9 +22,9 @@ const REQUIRED_PAGE_SCRIPTS = [
   "subtask-toggle-main.js",
 ];
 
-function manifestFor(browserBuild) {
-  const manifestPath = path.join(__dirname, "..", ".output", browserBuild, "manifest.json");
-  return JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+function manifestFor(browserBuild: string): ExtensionManifest {
+  const manifestPath = path.join(currentDirectory, "..", ".output", browserBuild, "manifest.json");
+  return JSON.parse(fs.readFileSync(manifestPath, "utf8")) as ExtensionManifest;
 }
 
 for (const browserBuild of ["chrome-mv3", "firefox-mv2"]) {
