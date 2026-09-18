@@ -10,10 +10,13 @@
   <body>
     <main>
       <header class="hero">
-        <div>
-          <p class="eyebrow">MES</p>
-          <h1>Marvin Enhancement Suite</h1>
-          <p class="lede">Unofficial fixes and opt-in power tools for Amazing Marvin.</p>
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true">M</div>
+          <div>
+            <p class="eyebrow">MES</p>
+            <h1>Marvin Enhancement Suite</h1>
+            <p class="lede">Unofficial fixes and opt-in power tools for Amazing Marvin.</p>
+          </div>
         </div>
         <label class="master-control">
           <input id="master-enabled" type="checkbox" />
@@ -22,7 +25,8 @@
       </header>
 
       <section class="notice" aria-label="Safety information">
-        Every feature can be disabled. Settings are stored only in this browser profile, and saving reloads open Marvin tabs.
+        <strong>No browser restart needed.</strong> Every feature can be disabled, settings stay in this browser profile,
+        and saving reloads open Marvin tabs so changes take effect.
       </section>
 
       <section>
@@ -46,6 +50,12 @@
           <span>
             <strong>Advanced safety controls</strong>
             <small>Disable any individual fix or enhancement</small>
+          </span>
+          <span class="summary-action">
+            <span id="advanced-summary-action">Show all 5 controls</span>
+            <svg class="chevron" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="m5 7.5 5 5 5-5" />
+            </svg>
           </span>
         </summary>
 

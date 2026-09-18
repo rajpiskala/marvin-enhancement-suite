@@ -14,7 +14,7 @@ MES is not affiliated with Amazing GmbH. It deliberately uses a separate name an
 | Toggle all subtasks | Workflow enhancement | Off | Hover a task (or one of its visible subtasks), then press `Alt+Shift+D` |
 | Task unroller | Workflow enhancement | Off | Expansion cap, large-run confirmation, duplicate receipts, and best-effort undo |
 
-Every module, including default-on fixes, can be disabled under **Advanced safety controls**. The toolbar popup also provides a master pause switch.
+Every module, including default-on fixes, can be disabled from the toolbar popup or under **Advanced safety controls**. The popup starts compact, expands its complete module list in place, auto-saves individual toggles, and also provides a master pause switch. Changes reload open Marvin tabs; they never require a browser restart.
 
 AM/PM anomaly suggestions, habit/task linking, burndown collection, and the separate mobile shell are intentionally outside the initial extension.
 
@@ -67,6 +67,7 @@ WXT produces both browser builds from one TypeScript codebase.
 - Task Unroller remains in the isolated extension world so its API bridge and credentials are not exposed to page scripts.
 - The background worker validates a narrow request schema before calling Marvin's API.
 - Options and popup pages control the same versioned settings object.
+- The self-contained popup uses Marvin-inspired teal and locally bundled Outfit typography; it does not load remote UI assets.
 
 ## Testing
 

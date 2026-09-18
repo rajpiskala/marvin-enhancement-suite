@@ -14,6 +14,8 @@ const elements = {
   credentials: requiredElement("unroller-credentials"),
   save: requiredButton("save"),
   undoUnroll: requiredButton("undo-unroll"),
+  advanced: requiredDetails("advanced-controls"),
+  advancedAction: requiredElement("advanced-summary-action"),
   status: requiredElement("status"),
 };
 
@@ -32,6 +34,12 @@ function requiredInput(id: string): HTMLInputElement {
 function requiredButton(id: string): HTMLButtonElement {
   const element = requiredElement(id);
   if (!(element instanceof HTMLButtonElement)) throw new Error(`#${id} is not a button.`);
+  return element;
+}
+
+function requiredDetails(id: string): HTMLDetailsElement {
+  const element = requiredElement(id);
+  if (!(element instanceof HTMLDetailsElement)) throw new Error(`#${id} is not a details element.`);
   return element;
 }
 
@@ -64,6 +72,10 @@ function readForm(): MesSettings {
 
 elements.unroller.addEventListener("change", () => {
   elements.credentials.hidden = !elements.unroller.checked;
+});
+
+elements.advanced.addEventListener("toggle", () => {
+  elements.advancedAction.textContent = elements.advanced.open ? "Hide controls" : "Show all 5 controls";
 });
 
 elements.undoUnroll.addEventListener("click", async () => {

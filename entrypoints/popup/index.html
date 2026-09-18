@@ -8,12 +8,122 @@
   </head>
   <body>
     <main>
-      <p class="eyebrow">MES</p>
-      <h1>Marvin Enhancement Suite</h1>
-      <label class="master"><input id="master-enabled" type="checkbox" /> <span>Enabled on Marvin</span></label>
-      <p id="feature-count"></p>
-      <button id="settings" type="button">Settings and safety controls</button>
-      <p id="status" role="status"></p>
+      <header class="brand">
+        <div class="brand-mark" aria-hidden="true">M</div>
+        <div>
+          <p class="eyebrow">MES</p>
+          <h1>Marvin Enhancement Suite</h1>
+          <p class="tagline">Unofficial fixes and power tools for Marvin.</p>
+        </div>
+      </header>
+
+      <button id="master-toggle" class="master-toggle" type="button" aria-pressed="true" disabled>
+        <span class="master-state-dot" aria-hidden="true"></span>
+        <span class="master-copy">
+          <strong id="master-label">Loading MES…</strong>
+          <small id="master-hint">Checking this browser profile</small>
+        </span>
+        <span id="master-action" class="master-action">Pause</span>
+      </button>
+
+      <button
+        id="options-toggle"
+        class="options-toggle"
+        type="button"
+        aria-expanded="false"
+        aria-controls="customization-panel"
+      >
+        <span>
+          <strong id="options-toggle-label">Show options</strong>
+          <small id="feature-count">Loading modules…</small>
+        </span>
+        <svg class="chevron" viewBox="0 0 20 20" aria-hidden="true">
+          <path d="m5 7.5 5 5 5-5" />
+        </svg>
+      </button>
+
+      <section id="customization-panel" class="customization-panel" aria-labelledby="options-heading" hidden>
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Customize</p>
+            <h2 id="options-heading">Choose what MES changes</h2>
+          </div>
+          <span class="auto-save">Auto-saves</span>
+        </div>
+
+        <div class="feature-list">
+          <label class="feature-row">
+            <span class="feature-copy">
+              <strong>Autocomplete cleanup</strong>
+              <small>Stops rapid Enter presses from leaking markup into task titles.</small>
+              <span class="feature-badge fix">Fix · default on</span>
+            </span>
+            <span class="switch">
+              <input id="feature-autocomplete" type="checkbox" disabled />
+              <span aria-hidden="true"></span>
+            </span>
+          </label>
+
+          <label class="feature-row">
+            <span class="feature-copy">
+              <strong>Procrastination date</strong>
+              <small>Shows the exact procrastination start date on hover.</small>
+              <span class="feature-badge fix">Fix · default on</span>
+            </span>
+            <span class="switch">
+              <input id="feature-procrastination" type="checkbox" disabled />
+              <span aria-hidden="true"></span>
+            </span>
+          </label>
+
+          <label class="feature-row">
+            <span class="feature-copy">
+              <strong>Explicit durations only</strong>
+              <small>Uses <code>~1h</code>, not prose such as “4 Hour Race”.</small>
+              <span class="feature-badge enhancement">Enhancement</span>
+            </span>
+            <span class="switch">
+              <input id="feature-duration" type="checkbox" disabled />
+              <span aria-hidden="true"></span>
+            </span>
+          </label>
+
+          <label class="feature-row">
+            <span class="feature-copy">
+              <strong>Toggle all subtasks</strong>
+              <small>Hover a task, then press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd>.</small>
+              <span class="feature-badge enhancement">Enhancement</span>
+            </span>
+            <span class="switch">
+              <input id="feature-subtasks" type="checkbox" disabled />
+              <span aria-hidden="true"></span>
+            </span>
+          </label>
+
+          <label class="feature-row">
+            <span class="feature-copy">
+              <strong>Task unroller</strong>
+              <small>Expands numbered task sequences with safeguards and undo.</small>
+              <span class="feature-badge experimental">Hardened opt-in</span>
+            </span>
+            <span class="switch">
+              <input id="feature-unroller" type="checkbox" disabled />
+              <span aria-hidden="true"></span>
+            </span>
+          </label>
+        </div>
+
+        <p class="unroller-note">Task unroller credentials and undo live in Advanced settings.</p>
+      </section>
+
+      <footer>
+        <button id="advanced-settings" class="advanced-settings" type="button">
+          <span>Advanced settings &amp; safety</span>
+          <span aria-hidden="true">↗</span>
+        </button>
+        <p class="reload-note"><strong>No browser restart needed.</strong> MES reloads open Marvin tabs after a change.</p>
+        <p id="status" role="status" aria-live="polite"></p>
+      </footer>
     </main>
     <script type="module" src="./main.ts"></script>
   </body>

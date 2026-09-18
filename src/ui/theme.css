@@ -1,0 +1,45 @@
+@import "@fontsource-variable/outfit/wght.css";
+
+:root {
+  color-scheme: light;
+  font-family: "Outfit Variable", Outfit, "Segoe UI", Tahoma, sans-serif;
+  font-synthesis: none;
+  --mes-teal: #1cc5cb;
+  --mes-teal-hover: #15aeb5;
+  --mes-teal-dark: #087b82;
+  --mes-teal-ink: #075d63;
+  --mes-teal-soft: #e9fbfc;
+  --mes-gold: #f7da88;
+  --mes-ink: #111827;
+  --mes-muted: #667085;
+  --mes-border: #dce7e9;
+  --mes-surface: #fff;
+  --mes-background: #f5fafb;
+  --mes-danger: #b54747;
+  --mes-danger-soft: #fff2f1;
+  --mes-shadow: 0 12px 30px rgb(17 24 39 / 9%);
+}
+
+body {
+  font-family: "Outfit Variable", Outfit, "Segoe UI", Tahoma, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+summary:focus-visible {
+  outline: 3px solid rgb(28 197 203 / 30%);
+  outline-offset: 2px;
+}
+
+[hidden] {
+  display: none !important;
+}
