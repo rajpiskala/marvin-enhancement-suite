@@ -24,6 +24,12 @@ test("popup exposes every module behind an explicit expandable options button", 
   for (const id of expectedIds) assert.match(html, new RegExp(`id="${id}"`));
 });
 
+test("popup uses the generated MES icon instead of a text placeholder", () => {
+  const html = read("entrypoints/popup/index.html");
+  assert.match(html, /class="brand-mark" src="\/icons\/icon-128\.png"/);
+  assert.doesNotMatch(html, /class="brand-mark"[^>]*>M</);
+});
+
 test("popup explains that changes do not need a browser restart", () => {
   const popup = read("entrypoints/popup/index.html");
   assert.match(popup, /No browser restart needed\./);

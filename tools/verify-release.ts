@@ -225,6 +225,7 @@ const storeAssets = new Map([
   ["store-assets/promo-small-440x280.png", { width: 440, height: 280 }],
   ["store-assets/promo-marquee-1400x560.png", { width: 1400, height: 560 }],
   ["docs/assets/mes-popup.png", { width: 760, height: 2004 }],
+  ["docs/assets/procrastination-date-tooltip.png", { width: 918, height: 125 }],
 ]);
 for (const [filename, dimensions] of storeAssets) {
   assert.deepEqual(pngDimensions(await readFile(filename)), dimensions, `${filename} has the wrong dimensions`);
@@ -235,7 +236,10 @@ const amoMetadata = JSON.parse(await readFile("amo-metadata.json", "utf8")) as {
   summary: Record<string, string>;
   version: { license: string };
 };
-assert.equal(amoMetadata.summary["en-US"], "Fix Amazing Marvin browser bugs and add opt-in workflow tools.");
+assert.equal(
+  amoMetadata.summary["en-US"],
+  "Fix stubborn Amazing Marvin browser bugs and add practical, opt-in workflow upgrades.",
+);
 assert.equal(amoMetadata.version.license, packageJson.license);
 assert.match(await readFile("CHANGELOG.md", "utf8"), new RegExp(`^## ${version.replaceAll(".", "\\.")}\\b`, "m"));
 

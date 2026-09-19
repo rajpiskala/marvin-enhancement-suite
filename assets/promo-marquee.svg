@@ -5,11 +5,6 @@
       <stop offset="0.55" stop-color="#087B82"/>
       <stop offset="1" stop-color="#1CC5CB"/>
     </linearGradient>
-    <linearGradient id="icon" x1="530" y1="130" x2="870" y2="470" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#66DDE1"/>
-      <stop offset="0.56" stop-color="#1CC5CB"/>
-      <stop offset="1" stop-color="#0E9FA7"/>
-    </linearGradient>
     <filter id="shadow" x="430" y="56" width="540" height="540" filterUnits="userSpaceOnUse">
       <feDropShadow dx="0" dy="22" stdDeviation="24" flood-color="#022F32" flood-opacity="0.42"/>
     </filter>
@@ -23,9 +18,5 @@
     <rect x="1030" y="310" width="245" height="34" rx="17"/>
     <rect x="1103" y="366" width="172" height="22" rx="11" opacity="0.55"/>
   </g>
-  <g filter="url(#shadow)">
-    <rect x="500" y="80" width="400" height="400" rx="104" fill="url(#icon)"/>
-    <circle cx="825" cy="160" r="38" fill="#F7DA88"/>
-    <path d="M592 370V207L700 309L808 207V370" fill="none" stroke="#FFFFFF" stroke-width="45" stroke-linecap="round" stroke-linejoin="round"/>
-  </g>
+  <rect x="500" y="80" width="400" height="400" rx="120" fill="#FFFFFF" fill-opacity="0.001" filter="url(#shadow)"/>
 </svg>

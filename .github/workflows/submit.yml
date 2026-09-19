@@ -42,13 +42,13 @@ jobs:
         run: npm audit --audit-level=high
 
       - name: Build and verify release packages
-        run: npm run release
+        run: npm run marketplace:prepare
 
       - name: Upload packages for review
         uses: actions/upload-artifact@v4
         with:
           name: marvin-enhancement-suite-${{ github.sha }}
-          path: .output/marvin-enhancement-suite-*.zip
+          path: .output/marketplace/**
           if-no-files-found: error
           retention-days: 30
 

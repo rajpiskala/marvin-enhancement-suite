@@ -11,7 +11,7 @@ export default defineConfig({
   manifest: ({ browser, manifestVersion }) => ({
     name: "Marvin Enhancement Suite",
     short_name: "MES",
-    description: "Unofficial fixes and opt-in power tools for Amazing Marvin.",
+    description: "Fix stubborn Amazing Marvin browser bugs and add practical, opt-in workflow upgrades.",
     homepage_url: "https://github.com/rajpiskala/marvin-enhancement-suite",
     icons,
     permissions: ["storage"],

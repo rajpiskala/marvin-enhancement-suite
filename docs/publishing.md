@@ -2,12 +2,14 @@
 
 The first Chrome Web Store and Firefox Add-ons listings must be created and reviewed manually. After both listings exist, updates can use the guarded GitHub workflow or the equivalent local commands below.
 
+Run `npm run marketplace:prepare` whenever you want a clean, upload-ready folder. It performs the full release verification and creates `.output/marketplace/` with separate Chrome and Firefox folders, listing copy, a step-by-step checklist, and SHA-256 checksums.
+
 ## Prepare the first listings
 
 1. Make the GitHub repository public so the homepage, support, privacy, and source links work for store users.
-2. Create the Chrome Web Store draft and upload the Chrome ZIP from `.output/`.
-3. Create the Firefox Add-ons draft and upload both the Firefox ZIP and matching sources ZIP.
-4. Copy the descriptions, permission explanations, privacy answers, reviewer notes, and artwork plan from `docs/store-listing.md`.
+2. Run `npm ci` and `npm run marketplace:prepare`.
+3. Open `.output/marketplace/UPLOAD-CHECKLIST.md` and upload the files it maps to each store field.
+4. Copy the descriptions, permission explanations, privacy answers, and reviewer notes from `.output/marketplace/LISTING.md`.
 5. Record the Chrome extension ID and configure the store API credentials listed below.
 
 ## Release locally
@@ -15,11 +17,11 @@ The first Chrome Web Store and Firefox Add-ons listings must be created and revi
 ```text
 npm ci
 npm run version:set -- 0.1.1
-npm run release
+npm run marketplace:prepare
 npm run submit:dry-run
 ```
 
-Review `CHANGELOG.md`, the three versioned ZIP files in `.output/`, and a clean `git status` before removing `--dry-run`:
+Review `CHANGELOG.md`, `.output/marketplace/UPLOAD-CHECKLIST.md`, the files and checksums in `.output/marketplace/`, and a clean `git status` before removing `--dry-run`:
 
 ```text
 npm run submit

@@ -35,8 +35,8 @@
   <body>
     <section class="copy">
       <p class="eyebrow">Marvin Enhancement Suite</p>
-      <h1>Five small fixes. One calm popup.</h1>
-      <p class="lede">Clean up stubborn Amazing Marvin bugs and turn on workflow tools only when you want them.</p>
+      <h1>A smoother Marvin, on your terms.</h1>
+      <p class="lede">Fix stubborn browser bugs and add practical workflow upgrades—each one independently toggleable.</p>
       <div class="pills">
         <span class="pill">Every module is optional</span>
         <span class="pill">No browser restart</span>
@@ -49,10 +49,13 @@
     </div>
     <script>
       const frame = document.querySelector("iframe");
-      frame.addEventListener("load", () => {
+      const showOptions = () => {
         const button = frame.contentDocument.getElementById("options-toggle");
         if (button?.getAttribute("aria-expanded") !== "true") button?.click();
-      });
+      };
+      frame.addEventListener("load", showOptions);
+      setTimeout(showOptions, 100);
+      setTimeout(showOptions, 500);
     </script>
   </body>
 </html>

@@ -8,11 +8,11 @@ Marvin Enhancement Suite
 
 ## Summary
 
-Fix Amazing Marvin browser bugs and add opt-in workflow tools.
+Fix stubborn Amazing Marvin browser bugs and add practical, opt-in workflow upgrades.
 
 ## Description
 
-Amazing Marvin is great. A few stubborn browser bugs are not. Marvin Enhancement Suite bundles small fixes and optional workflow tools into one extension, with every module controlled from a compact toolbar popup.
+Amazing Marvin is great. MES makes the web app feel more finished. Marvin Enhancement Suite fixes stubborn browser bugs and adds practical workflow upgrades, with every module controlled from a compact toolbar popup.
 
 Two conservative fixes start on: MES prevents Marvin's delayed autocomplete cleanup from leaving internal markup in task titles, and it adds the exact start date to Marvin's “days procrastinated” tooltip. You can turn either one off at any time.
 
