@@ -30,7 +30,7 @@ Marvin Enhancement Suite is an independent community project and is not produced
 
 ## Categories and links
 
-- Chrome category: Productivity
+- Chrome category: Workflow & Planning
 - Firefox category: Other
 - Homepage: `https://github.com/rajpiskala/marvin-enhancement-suite`
 - Support: `https://github.com/rajpiskala/marvin-enhancement-suite/issues`
