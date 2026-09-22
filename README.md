@@ -109,7 +109,7 @@ Temporary Firefox add-ons are removed when Firefox restarts.
 ## Browser support
 
 - Chrome and Chromium desktop browsers: Manifest V3.
-- Firefox desktop 140 or newer: Manifest V2.
+- Firefox desktop 142 or newer: Manifest V2.
 - Amazing Marvin's native desktop and mobile apps: not supported.
 - Firefox Android: not currently supported or listed.
 

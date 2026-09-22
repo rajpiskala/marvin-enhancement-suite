@@ -33,9 +33,6 @@ interface ReleaseManifest {
       id: string;
       strict_min_version: string;
     };
-    gecko_android: {
-      strict_min_version: string;
-    };
   };
   content_scripts: Array<{
     matches: string[];
@@ -161,8 +158,8 @@ for (const [browser, outputDirectory] of [
     assert.deepEqual(manifest.optional_permissions, ["https://serv.amazingmarvin.com/*"]);
     assert.ok(manifest.browser_specific_settings, "Firefox manifest is missing browser-specific settings");
     assert.equal(manifest.browser_specific_settings.gecko.id, "marvin-enhancement-suite@rajpiskala");
-    assert.equal(manifest.browser_specific_settings.gecko.strict_min_version, "140.0");
-    assert.equal(manifest.browser_specific_settings.gecko_android.strict_min_version, "142.0");
+    assert.equal(manifest.browser_specific_settings.gecko.strict_min_version, "142.0");
+    assert.equal("gecko_android" in manifest.browser_specific_settings, false);
     assert.deepEqual(manifest.browser_specific_settings.gecko.data_collection_permissions, {
       required: ["none"],
       optional: ["authenticationInfo", "websiteContent"],
